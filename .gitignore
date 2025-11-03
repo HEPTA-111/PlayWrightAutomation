@@ -1,0 +1,56 @@
+Node.js dependencies
+
+node_modules/
+
+Compiled TypeScript output
+
+dist/
+
+Playwright reports and test artifacts
+
+playwright-report/
+test-results/
+blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+Local browser binaries (very important!)
+
+my-browsers/
+chromium-1194/
+chromium_headless_shell-1194/
+ffmpeg-1011/
+winldd-1007/
+portable-node/
+
+Executable files
+
+*.exe
+my-test.exe
+final-single-standalone.exe
+
+Log files
+
+*.log
+activation_errors.log
+playwright_cli_debug.txt
+
+Data output files
+
+page1_data_cgsn.json
+page2_data_cgsn.json
+page2_data_ccid.json
+activation_summary.json
+
+Backup files
+
+*.backup.ts
+
+OS and IDE files
+
+.DS_Store
+.vscode/
+
+Environment variables
+
+.env
