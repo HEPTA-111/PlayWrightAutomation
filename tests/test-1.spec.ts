@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
-import * as path from 'path'; // <-- ADDED: Need path for joining
+import * as path from 'path'; 
+
+// Force this test file to run in headed mode and slow down for visibility
+test.use({ headless: false, launchOptions: { slowMo: 50 } });
+
 
 // --- ADDED: Determine where to save output files ---
 // If OUTPUT_PATH is set (by the .exe), use it.
@@ -13,7 +17,7 @@ test('test with 3 tabs', async ({ context }) => {
   // --- Expiration Date Logic ---
   // Set the hard-coded expiration date (YYYY-MM-DD)
   // This is 10 days from Oct 31, 2025
-  const expirationDate = new Date('2025-11-10'); 
+  const expirationDate = new Date('2025-11-20'); 
   const currentDate = new Date();
 
   if (currentDate > expirationDate) {

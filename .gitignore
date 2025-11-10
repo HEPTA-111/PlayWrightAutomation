@@ -54,3 +54,7 @@ OS and IDE files
 Environment variables
 
 .env
+
+# Playwright
+/playwright-report/
+/blob-report/
