@@ -1,0 +1,8 @@
+{
+  "process": "Activation",
+  "provider": "MobileX",
+  "gateway": "103",
+  "linkType": "external",
+  "startPortIndex": 29,
+  "timestamp": 1762939893078
+}
