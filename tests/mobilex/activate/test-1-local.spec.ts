@@ -12,8 +12,8 @@ test.use({ headless: false, launchOptions: { slowMo: 50 } });
 const outputPath = process.env.OUTPUT_PATH || process.cwd();
 // ---
 
-test('test with 3 tabs', async ({ context }) => {
 
+test('test with 3 tabs', async ({ context }) => {
   // --- Expiration Date Logic ---
   // Set the hard-coded expiration date (YYYY-MM-DD)
   // This is 10 days from Oct 31, 2025

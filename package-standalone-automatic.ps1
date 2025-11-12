@@ -1,7 +1,8 @@
 <#
   package-standalone-automatic.ps1
   Usage: open PowerShell in project root and run:
-    .\package-standalone-automatic.ps1
+    Unblock-File .\package-standalone-automatic.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\package-standalone-automatic.ps1
 #>
 
 param(
@@ -39,11 +40,57 @@ if (-not $SfxModule) {
 $root = (Get-Location).Path
 Write-Host "Packaging from root:" $root
 
-# Ensure dist and my-browsers exist (fail early if they don't)
-foreach ($needed in @("dist","my-browsers")) {
-  if (-not (Test-Path (Join-Path $root $needed))) {
-    Write-Error "$needed/ folder not found under project root. Run `npm run build` and `npx playwright install chromium` first."
+# Ensure dist exists (we still require a build)
+if (-not (Test-Path (Join-Path $root "dist"))) {
+  Write-Error "dist/ folder not found under project root. Run `npm run build` before packaging."
+  exit 1
+}
+
+# Ensure launcher.js exists
+$launcherSrc = Join-Path $root "launcher.js"
+if (-not (Test-Path $launcherSrc)) {
+  Write-Error "launcher.js not found in the project root. Please ensure launcher.js exists and try again."
+  exit 1
+}
+
+# Ensure tests folder exists (we will bundle it)
+$testsSrc = Join-Path $root "tests"
+if (-not (Test-Path $testsSrc)) {
+  Write-Error "tests/ folder not found in project root. Create tests folder with your specs before packaging."
+  exit 1
+}
+
+# Ensure my-browsers exists; if not, try to install Playwright Chromium into ./my-browsers
+$myBrowsersPath = Join-Path $root "my-browsers"
+if (-not (Test-Path $myBrowsersPath)) {
+  Write-Host "my-browsers/ not found. Attempting automatic Playwright browser install into ./my-browsers ..."
+  $npxCmd = (Get-Command npx -ErrorAction SilentlyContinue)
+  if (-not $npxCmd) {
+    Write-Error "npx not found in PATH. Install Node.js/npm or ensure npx is available, then re-run packaging."
     exit 1
+  }
+
+  # Set PLAYWRIGHT_BROWSERS_PATH for this process to install into ./my-browsers
+  $env:PLAYWRIGHT_BROWSERS_PATH = $myBrowsersPath
+
+  Write-Host "Running: npx playwright install chromium (this may take some time)..."
+  try {
+    # run and stream output
+    & npx playwright install chromium 2>&1 | ForEach-Object { Write-Host $_ }
+  } catch {
+    Write-Error "Automatic Playwright install failed: $($_.Exception.Message)"
+    Write-Error "If you're behind a proxy, configure npm/proxy settings and try manually:"
+    Write-Error "`$Env:PLAYWRIGHT_BROWSERS_PATH=""$myBrowsersPath""; npx playwright install chromium"
+    exit 1
+  }
+
+  Start-Sleep -Seconds 1
+
+  if (-not (Test-Path $myBrowsersPath)) {
+    Write-Error "Playwright install reported success but ./my-browsers was not created. Inspect the Playwright output above."
+    exit 1
+  } else {
+    Write-Host "Playwright browsers installed into: $myBrowsersPath" -ForegroundColor Green
   }
 }
 
@@ -52,12 +99,7 @@ $portableNodePath = Join-Path $root "portable-node"
 if (-not (Test-Path $portableNodePath) -or $ForceDownloadNode) {
   Write-Host "portable-node not found (or forced). Attempting to download portable Node matching installed version..."
 
-  # Check for local node.exe to detect version
-  try {
-    $nodeVersionRaw = (& node -v) 2>$null
-  } catch {
-    $nodeVersionRaw = $null
-  }
+  try { $nodeVersionRaw = (& node -v) 2>$null } catch { $nodeVersionRaw = $null }
 
   if (-not $nodeVersionRaw) {
     Write-Host "No local Node found. Please specify a version or install Node on the build machine."
@@ -123,29 +165,77 @@ if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
 New-Item -ItemType Directory -Path $bundle | Out-Null
 
 # Copy content
-Write-Host "Copying dist/"
+Write-Host "Copying dist/ to bundle..."
 Copy-Item -Path (Join-Path $root "dist") -Destination $bundle -Recurse -Force
 
-Write-Host "Copying my-browsers/"
+Write-Host "Copying my-browsers/ to bundle..."
 Copy-Item -Path (Join-Path $root "my-browsers") -Destination $bundle -Recurse -Force
 
-Write-Host "Copying portable-node/"
+Write-Host "Copying portable-node/ to bundle..."
 Copy-Item -Path (Join-Path $root "portable-node") -Destination $bundle -Recurse -Force
 
-Write-Host "Copying node_modules/ (this may take a while)"
+Write-Host "Copying node_modules/ to bundle (this may take a while)..."
 Copy-Item -Path (Join-Path $root "node_modules") -Destination $bundle -Recurse -Force
 
-# Ensure run.bat exists or create a default
+# Copy launcher and tests into the bundle so launcher can access specs at runtime
+Write-Host "Copying launcher.js to bundle..."
+Copy-Item -Path $launcherSrc -Destination (Join-Path $bundle "launcher.js") -Force
+
+Write-Host "Copying tests/ to bundle..."
+Copy-Item -Path $testsSrc -Destination (Join-Path $bundle "tests") -Recurse -Force
+
+# --- NEW: ensure Playwright config and package.json are included so runtime has projects defined ---
+$cfgTsSrc = Join-Path $root "playwright.config.ts"
+$cfgJsSrc = Join-Path $root "playwright.config.js"
+$pkgJson = Join-Path $root "package.json"
+
+if (Test-Path $cfgTsSrc) {
+  Write-Host "Copying playwright.config.ts to bundle..."
+  Copy-Item -Path $cfgTsSrc -Destination (Join-Path $bundle "playwright.config.ts") -Force
+} elseif (Test-Path $cfgJsSrc) {
+  Write-Host "Copying playwright.config.js to bundle..."
+  Copy-Item -Path $cfgJsSrc -Destination (Join-Path $bundle "playwright.config.js") -Force
+} else {
+  Write-Host "Warning: No playwright.config.ts or playwright.config.js found in project root. Playwright may not have projects defined."
+}
+
+if (Test-Path $pkgJson) {
+  Write-Host "Copying package.json to bundle..."
+  Copy-Item -Path $pkgJson -Destination (Join-Path $bundle "package.json") -Force
+}
+# --- end new section ---
+
+# Ensure run.bat exists or create a default that runs launcher.js (not dist/run-my-test.js)
 $runBatSrc = Join-Path $root "run.bat"
 if (-not (Test-Path $runBatSrc)) {
-  Write-Host "run.bat not found. Creating a default run.bat..."
+  Write-Host "run.bat not found. Creating a default run.bat that launches launcher.js..."
   @'
 @echo off
+SETLOCAL
 SET BASE=%~dp0
-"%BASE%portable-node\node.exe" "%BASE%dist\run-my-test.js"
+REM Use bundled portable node to run launcher.js (launcher starts the GUI and then runs tests)
+"%BASE%portable-node\node.exe" "%BASE%launcher.js"
+pause
+'@ | Out-File -FilePath $runBatSrc -Encoding ASCII
+} else {
+  # If run.bat exists, back it up then replace with small wrapper that prefers launcher.js if present.
+  Write-Host "Existing run.bat found. Backing up to run.bat.bak and creating launcher-run wrapper."
+  Copy-Item -Path $runBatSrc -Destination (Join-Path $root "run.bat.bak") -Force
+  @'
+@echo off
+SETLOCAL
+SET BASE=%~dp0
+REM If launcher.js exists in bundle, run it; otherwise fall back to dist\run-my-test.js
+IF EXIST "%~dp0launcher.js" (
+  "%BASE%portable-node\node.exe" "%~dp0launcher.js"
+) ELSE (
+  "%BASE%portable-node\node.exe" "%BASE%dist\run-my-test.js"
+)
 pause
 '@ | Out-File -FilePath $runBatSrc -Encoding ASCII
 }
+
+# Copy run.bat into bundle
 Copy-Item -Path $runBatSrc -Destination $bundle -Force
 
 # README
@@ -156,7 +246,8 @@ Playwright Automation Runner (Standalone)
 
 1. Double-click the .exe file - it will extract and run automatically.
 2. This bundle includes a portable Node, node_modules and Playwright browsers.
-3. If antivirus blocks execution, extract the archive manually and run run.bat.
+3. The application will launch a GUI launcher first (launcher.js) that lets you pick process/provider/gateway/start port.
+4. If antivirus blocks execution, extract the archive manually and run run.bat.
 
 '@ | Out-File -FilePath $readmeSrc -Encoding UTF8
 }
@@ -171,9 +262,10 @@ Write-Host "Created archive:" $archive
 
 # Create SFX config
 $isGuiSfx = $SfxModule -match "7zS"
+
 if ($isGuiSfx) {
-  # GUI SFX config (7zS.sfx or 7zSD.sfx)
-  $config = @"
+  # GUI SFX config (7zS.sfx or 7zSD.sfx) - use single-quoted here-string
+  $config = @'
 ;!@Install@!UTF-8!
 Title="Playwright Automation - Standalone"
 BeginPrompt="This will extract and run the Playwright automation. Continue?"
@@ -185,16 +277,16 @@ OverwriteMode="2"
 ExecuteFile="run.bat"
 ExecuteParameters=""
 ;!@InstallEnd@!
-"@
+'@
 } else {
-  # Console SFX config (7z.sfx) - simpler, no auto-run
-  $config = @"
+  # Console SFX config (7z.sfx) - simpler, no auto-run. Use single-quoted here-string
+  $config = @'
 ;!@Install@!UTF-8!
 Title="Playwright Automation - Standalone"
 BeginPrompt="This package will extract to the current folder and run the test. Continue?"
 RunProgram="run.bat"
 ;!@InstallEnd@!
-"@
+'@
   Write-Warning "Using console SFX (7z.sfx). The executable will extract files but may not auto-run."
   Write-Warning "For better auto-run support, install 7-Zip with GUI SFX modules (7zS.sfx)."
 }
@@ -270,10 +362,10 @@ Write-Host "  2. When they double-click it:"
 if ($isGuiSfx) {
   Write-Host "     - It will show extraction dialog"
   Write-Host "     - Extract files to chosen location"
-  Write-Host "     - Automatically run run.bat"
+  Write-Host "     - Automatically run run.bat (which launches the GUI launcher.js)"
 } else {
   Write-Host "     - It will ask for extraction location"
   Write-Host "     - Extract files"
-  Write-Host "     - They may need to manually run run.bat"
+  Write-Host "     - They may need to manually run run.bat (which launches the GUI launcher.js)"
 }
 Write-Host ""

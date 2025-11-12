@@ -1,8 +1,8 @@
 {
-  "process": "Activation",
+  "process": "Refill",
   "provider": "MobileX",
   "gateway": "103",
-  "linkType": "external",
-  "startPortIndex": 29,
-  "timestamp": 1762939893078
+  "linkType": null,
+  "startPortIndex": 1,
+  "timestamp": 1762958184179
 }

@@ -1,10 +1,3 @@
-// launcher.js
-// Playwright UI launcher for selecting process/provider/gateway/start-port/link type
-// - Saves selection.json
-// - Maps gateway -> test index and runs the appropriate Playwright spec under tests/mobilex/<activate|refill>/
-// - Robust: uses page.exposeFunction to get selection (no timeouts) and spawns Playwright with a safe relative path
-// Usage: node launcher.js
-
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
@@ -12,8 +5,6 @@ const { spawn } = require('child_process');
 
 (async () => {
   // --------- CONFIG: gateway -> test index (editable) ----------
-  // Map gateway numbers (strings) to test numbers.
-  // Example: '103' -> 1 means gateway 103 runs test-1 / test-1-local
   const gatewayToTestMap = {
     '101': 3,
     '102': 2,
@@ -31,6 +22,17 @@ const { spawn } = require('child_process');
   function log(...args) { console.log('Launcher:', ...args); }
   function errlog(...args) { console.error('Launcher:', ...args); }
 
+  // Diagnostic helper to list a directory (best-effort)
+  function listFolder(folder, limit = 50) {
+    try {
+      if (!fs.existsSync(folder)) return `${folder} (not found)`;
+      const entries = fs.readdirSync(folder).slice(0, limit);
+      return `${folder} => ${entries.join(', ')}`;
+    } catch (e) {
+      return `Error listing ${folder}: ${String(e)}`;
+    }
+  }
+
   // Launch headed Playwright browser for the small UI
   let browser;
   try {
@@ -41,19 +43,16 @@ const { spawn } = require('child_process');
   }
 
   const page = await browser.newPage();
-  await page.setViewportSize({ width: 900, height: 740 });
+  await page.setViewportSize({ width: 920, height: 740 });
 
-  // We'll resolve this promise when the page calls window.onSelection(...)
   let resolveSelection, rejectSelection;
   const selectionPromise = new Promise((resolve, reject) => {
     resolveSelection = resolve;
     rejectSelection = reject;
   });
 
-  // expose a Node function for the page to call with the final selection
   try {
     await page.exposeFunction('onSelection', (selection) => {
-      // selection should be a plain object
       resolveSelection(selection);
     });
   } catch (e) {
@@ -62,7 +61,6 @@ const { spawn } = require('child_process');
     process.exit(1);
   }
 
-  // Also handle page close / browser disconnect
   page.on('close', () => {
     rejectSelection(new Error('UI page closed before selection'));
   });
@@ -70,12 +68,11 @@ const { spawn } = require('child_process');
     rejectSelection(new Error('Browser disconnected before selection'));
   });
 
-  // Helper to build the gateway tiles HTML
   const makeGatewayHtml = () =>
     Array.from({ length: 10 }, (_, i) => 101 + i)
       .map(g => `<div class="gateway" data-gateway="${g}">Gateway ${g}</div>`).join('');
 
-  // Full HTML (modern styled) — the page will call window.onSelection(...) when the user clicks Launch
+  // Full HTML (modern styled) — the page will call window.onSelection(...) when the user confirms
   const fullHtml = `<!doctype html>
 <html>
 <head>
@@ -121,7 +118,7 @@ const { spawn } = require('child_process');
     <div class="card">
       <header>
         <div>
-          <h1>Playwright Test Launcher</h1>
+          <h1>Automata</h1>
           <div class="subtitle">Pick a process, provider, MobileX options and starting port.</div>
         </div>
       </header>
@@ -141,16 +138,16 @@ const { spawn } = require('child_process');
       <div id="step-provider" class="step hidden">
         <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 2 — Choose Provider</div><div class="muted">AT&T • t-mobile • Spectrum • MobileX</div></div>
         <div class="grid" style="margin-top:12px;">
-          <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div><div class="muted">light blue</div></div></div>
-          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">t-mobile</div><div class="muted">pink</div></div></div>
-          <div class="option provider" data-provider="Spectrum"><span class="swatch spectrum"></span><div><div class="label">Spectrum</div><div class="muted">dark blue</div></div></div>
-          <div class="option provider" data-provider="MobileX"><span class="swatch mobilex"></span><div><div class="label">MobileX</div><div class="muted">green</div></div></div>
+          <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div></div></div>
+          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">t-mobile</div></div></div>
+          <div class="option provider" data-provider="Spectrum"><span class="swatch spectrum"></span><div><div class="label">Spectrum</div></div></div>
+          <div class="option provider" data-provider="MobileX"><span class="swatch mobilex"></span><div><div class="label">MobileX</div></div></div>
         </div>
         <div class="controls"><div class="muted">Provider choice may change next steps</div><div><button class="btn ghost small" id="prov-back">← Back</button><button class="btn primary small" id="to-next">Next →</button></div></div>
       </div>
 
       <div id="step-mobilex" class="step hidden">
-        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 3 — MobileX Options</div><div class="muted">Choose gateway (101–110) and link type</div></div>
+        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 3 — MobileX Options</div><div class="muted">Choose gateway (101–110) and link type (Activation only)</div></div>
         <div style="margin-top:12px;">
           <div style="font-weight:600;margin-bottom:8px;">Choose Gateway</div>
           <div class="gateway-box" id="gateway-box">${makeGatewayHtml()}</div>
@@ -158,11 +155,12 @@ const { spawn } = require('child_process');
           <div style="font-weight:600;margin-top:12px;">Choose starting port (A1–A64)</div>
           <div class="field">
             <label class="muted">Start port index:</label>
-            <input id="start-port" type="number" min="1" max="64" value="29" />
+            <input id="start-port" type="number" min="1" max="64" value="1" />
             <div class="muted">This will be used as A{index} in the test loop</div>
           </div>
 
-          <div style="margin-top:12px;">
+          <!-- Link type section: hidden for Refill -->
+          <div id="link-type-section" style="margin-top:12px;">
             <div style="font-weight:600;margin-bottom:8px;">Link type</div>
             <div style="display:flex;gap:10px;">
               <div class="option linktype" data-link="external"><div class="label">External</div><div class="muted" style="margin-left:auto">external link</div></div>
@@ -180,7 +178,6 @@ const { spawn } = require('child_process');
         <div class="controls"><div class="muted">Review choices</div><div><button class="btn ghost small" id="confirm-back">← Back</button><button class="btn primary small" id="confirm-launch">Launch</button></div></div>
       </div>
 
-      <footer><div class="muted">Launcher • selection saved to selection.json</div><div class="muted">v1 • Playwright</div></footer>
     </div>
   </div>
 
@@ -216,8 +213,24 @@ const { spawn } = require('child_process');
     q('#to-next').addEventListener('click', ()=> {
       if (!state.provider) { alert('Please choose a provider'); return; }
       q('#step-provider').classList.add('hidden');
-      if (state.provider === 'MobileX') q('#step-mobilex').classList.remove('hidden');
-      else { updateSummary(); q('#step-confirm').classList.remove('hidden'); }
+      if (state.provider === 'MobileX') {
+        // Show MobileX options; show/hide link-type depending on process
+        q('#step-mobilex').classList.remove('hidden');
+        if (state.process === 'Refill') {
+          // For Refill, hide link-type selection and clear any previous linkType
+          const linkSection = q('#link-type-section');
+          if (linkSection) linkSection.style.display = 'none';
+          state.linkType = null;
+          clearSelected('.linktype');
+        } else {
+          // For Activation, show link-type
+          const linkSection = q('#link-type-section');
+          if (linkSection) linkSection.style.display = '';
+        }
+      } else {
+        updateSummary();
+        q('#step-confirm').classList.remove('hidden');
+      }
     });
 
     // MobileX interactions
@@ -248,7 +261,8 @@ const { spawn } = require('child_process');
 
     q('#mobilex-finish').addEventListener('click', ()=> {
       if (!state.gateway) { alert('Please choose a gateway'); return; }
-      if (!state.linkType) { alert('Please choose a link type'); return; }
+      // Only require linkType for Activation; Refill skips link-type
+      if (state.process === 'Activation' && !state.linkType) { alert('Please choose a link type'); return; }
       state.startPortIndex = parseInt(startPortInput.value || '29', 10) || 29;
       updateSummary();
       q('#step-mobilex').classList.add('hidden'); q('#step-confirm').classList.remove('hidden');
@@ -260,7 +274,11 @@ const { spawn } = require('child_process');
       s.push('<strong>Provider:</strong> ' + (state.provider || '-'));
       if (state.provider === 'MobileX') {
         s.push('<strong>Gateway:</strong> ' + (state.gateway || '-'));
-        s.push('<strong>Link:</strong> ' + (state.linkType || '-'));
+        if (state.process === 'Activation') {
+          s.push('<strong>Link:</strong> ' + (state.linkType || '-'));
+        } else {
+          s.push('<strong>Link:</strong> (not applicable for Refill)');
+        }
         s.push('<strong>Start port (index):</strong> A' + (state.startPortIndex || '-'));
       }
       q('#summary').innerHTML = s.map(x => '<div style="margin-bottom:6px;">'+x+'</div>').join('');
@@ -273,21 +291,21 @@ const { spawn } = require('child_process');
 
     // Final launch — call node-exposed function
     q('#confirm-launch').addEventListener('click', ()=> {
-      // call the Node-side function
+      // call the Node-side function if available
       if (typeof window.onSelection === 'function') {
-        window.onSelection(Object.assign({}, state, { timestamp: Date.now() }));
+        // ensure the selection's linkType remains null for Refill
+        const payload = Object.assign({}, state, { timestamp: Date.now() });
+        window.onSelection(payload);
       } else {
-        // fallback if the function isn't available
+        // fallback if not available
         window.__selection = Object.assign({}, state, { timestamp: Date.now() });
         alert('Launcher bridge not available; selection stored to window.__selection');
       }
     });
-
   </script>
 </body>
 </html>`;
 
-  // Load content into the page
   try {
     await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
   } catch (e) {
@@ -296,17 +314,16 @@ const { spawn } = require('child_process');
     process.exit(1);
   }
 
-  // Wait for selection (resolved via page.onSelection -> resolveSelection)
   let selection;
   try {
-    selection = await selectionPromise; // no timeout; resolves when page calls onSelection
+    selection = await selectionPromise;
   } catch (e) {
     errlog('wait for selection failed:', e);
     try { await browser.close(); } catch (_) {}
     process.exit(1);
   }
 
-  // Persist selection
+  // Save selection to disk (useful when running from package)
   const outPath = path.join(process.cwd(), 'selection.json');
   try {
     fs.writeFileSync(outPath, JSON.stringify(selection, null, 2), 'utf8');
@@ -316,13 +333,10 @@ const { spawn } = require('child_process');
     errlog('Failed to write selection.json:', e);
   }
 
-  // Close the UI browser
-  try { await browser.close(); } catch (e) { /* ignore */ }
+  try { await browser.close(); } catch (e) {}
 
-  // Determine process folder
+  // decide which test file to run
   const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
-
-  // Gateway -> test index
   const gateway = String(selection.gateway || '');
   const testIndex = gatewayToTestMap[gateway];
 
@@ -331,32 +345,52 @@ const { spawn } = require('child_process');
     process.exit(1);
   }
 
-  // decide local vs external
   const link = String(selection.linkType || '').toLowerCase();
-  const isLocal = (link === 'internal' || link === 'local');
-
-  // build spec name
+  const isLocal = (selection.process === 'Activation') && (link === 'internal' || link === 'local');
   const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
   const specPath = path.join(process.cwd(), 'tests', 'mobilex', procFolder, specFileName);
 
   if (!fs.existsSync(specPath)) {
+    // helpful diagnostics if spec missing inside extracted bundle
     errlog(`Expected test file not found: ${specPath}`);
-    errlog('Check that your tests exist at tests/mobilex/<activate|refill>/' + specFileName);
+    errlog('Listing bundle root and tests folder for debugging:');
+    errlog('Root listing: ' + listFolder(process.cwd(), 200));
+    errlog('tests listing: ' + listFolder(path.join(process.cwd(), 'tests'), 200));
     process.exit(1);
   }
 
-  // Use a safe, quoted relative path for the CLI so Windows path separators/backslashes don't confuse Playwright's argument parser
-  let relSpec = path.relative(process.cwd(), specPath);
-  // Convert path separators to POSIX style (forward slash) for the CLI (safer on shells)
-  relSpec = relSpec.split(path.sep).join('/');
+  let relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
 
-  // Build and spawn the Playwright CLI command as a single shell string to avoid Windows regex issues.
-  const startPort = String(selection.startPortIndex || '29');
-  const env = Object.assign({}, process.env, { START_PORT: startPort });
+  // If a playwright config exists in the bundle, instruct Playwright to use it explicitly
+  let configArg = '';
+  const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
+  const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+  if (fs.existsSync(cfgTs)) {
+    configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
+  } else if (fs.existsSync(cfgJs)) {
+    configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
+  } else {
+    // no config found — provide helpful diagnostics (we will still try to run without config)
+    log('Warning: No playwright.config.ts/js found in current folder. Playwright may not have projects defined.');
+    log('Bundle root listing:', listFolder(process.cwd(), 200));
+  }
 
-  const cmd = `npx playwright test "${relSpec}" --headed --project=chromium --workers=1`;
+  // If my-browsers exists in bundle, set PLAYWRIGHT_BROWSERS_PATH so Playwright will use bundled browsers
+  const myBrowsersPath = path.join(process.cwd(), 'my-browsers');
+  const env = Object.assign({}, process.env);
+  if (fs.existsSync(myBrowsersPath)) {
+    env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+    log('Set PLAYWRIGHT_BROWSERS_PATH to bundled my-browsers');
+  }
+
+  // Pass START_PORT env var for tests
+  env.START_PORT = String(selection.startPortIndex || '29');
+
+  // Build the command
+  const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
   log('Spawning:', cmd);
 
+  // Spawn in shell so quoting works on Windows
   const child = spawn(cmd, { shell: true, stdio: 'inherit', env });
 
   child.on('exit', (code) => {
