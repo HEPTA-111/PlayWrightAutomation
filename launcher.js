@@ -3,6 +3,18 @@ const path = require('path');
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 
+// --- BEGIN FIX: SET BROWSER PATH FOR LAUNCHER ---
+// This ensures the launcher's *own* chromium.launch() call (for the UI)
+// finds the browsers bundled inside the 'my-browsers' folder.
+const myBrowsersPath = path.join(process.cwd(), 'my-browsers');
+if (fs.existsSync(myBrowsersPath)) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+  console.log('[LAUNCHER] Set own browser path to:', myBrowsersPath);
+} else {
+  console.warn('[LAUNCHER] WARN: Bundled "my-browsers" folder not found!');
+}
+// --- END FIX ---
+
 (async () => {
   // --------- CONFIG: gateway -> test index (editable) ----------
   const gatewayToTestMap = {
@@ -137,6 +149,10 @@ const { spawn } = require('child_process');
         const env = Object.assign({}, process.env);
         env.RELOAD_PORTS = ports || ''; // Pass ports as env var
         log('✓ RELOAD_PORTS set to:', env.RELOAD_PORTS);
+        
+        // This env var should already be set, but we set it again for the child
+        // process just in case.
+        env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
 
         log('=== LAUNCHING RELOAD SCRIPT ===');
         log('Command:', cmd);
@@ -443,6 +459,7 @@ const { spawn } = require('child_process');
         </div>
       </header>
 
+      <!-- === STEP 1: CHOOSE PROCESS === -->
       <div id="step-process" class="step">
         <div class="step-header">Step 1 – Choose Process</div>
         <div class="grid">
@@ -493,11 +510,12 @@ const { spawn } = require('child_process');
         </div>
       </div>
 
+      <!-- === STEP 2: CHOOSE PROVIDER === -->
       <div id="step-provider" class="step hidden">
         <div class="step-header">Step 2 – Choose Provider</div>
         <div class="grid">
           <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div></div></div>
-          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile (GenMo)</div></div></div>
+          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile</div></div></div>
           <div class="option provider" data-provider="Spectrum"><span class="swatch spectrum"></span><div><div class="label">Spectrum</div></div></div>
           <div class="option provider" data-provider="MobileX"><span class="swatch mobilex"></span><div><div class="label">MobileX</div></div></div>
         </div>
@@ -510,11 +528,12 @@ const { spawn } = require('child_process');
         </div>
       </div>
       
+      <!-- === STEP 3: MOBILEX OPTIONS === -->
       <div id="step-mobilex" class="step hidden">
         <div class="step-header">Step 3 – MobileX Options</div>
         
         <div class="form-group">
-          <div class="form-label">Choose Gateway </div>
+          <div class="form-label">Choose Gateway (101–110)</div>
           <div class="gateway-box" id="gateway-box">${makeGatewayHtml()}</div>
         </div>
 
@@ -531,11 +550,13 @@ const { spawn } = require('child_process');
           </div>
         </div>
 
+        <!-- === ADDED: Email Management Section === -->
         <div class="form-group" id="email-section">
           <div class="form-label">Email Management</div>
           <div class="email-manager">
             <div class="email-list" id="email-list-container">
-              </div>
+              <!-- Emails will be rendered here by JS -->
+            </div>
             <div class="email-status" id="email-status-display">Loaded 0 emails.</div>
             <div class="email-add">
               <input type="text" id="email-add-input" placeholder="add.new@example.com" />
@@ -576,6 +597,8 @@ const { spawn } = require('child_process');
             </div>
           </div>
         </div>
+        <!-- === END Email Section === -->
+        
         <div class="controls">
           <div class="muted">Review and finish</div>
           <div>
@@ -585,11 +608,12 @@ const { spawn } = require('child_process');
         </div>
       </div>
       
+      <!-- === STEP 4: RELOAD PORTS === -->
       <div id="step-reload" class="step hidden">
         <div class="step-header">Reload Ports</div>
         
         <div class="form-group">
-          <div class="form-label">Choose Gateway </div>
+          <div class="form-label">Choose Gateway (101–110)</div>
           <div class="gateway-box" id="reload-gateway-box">${makeGatewayHtml()}</div>
         </div>
         
@@ -597,7 +621,7 @@ const { spawn } = require('child_process');
           <div class="form-label">Ports to Reload (Optional)</div>
           <input id="reload-ports-input" type="text" placeholder="e.g., 1, 5, 10-15 (leave blank for all)" />
           <div class="muted" style="margin-top: 6px;">
-            Use commas or ranges.
+            Leave blank to let the script decide. Otherwise, use commas or ranges.
           </div>
         </div>
         
@@ -610,6 +634,7 @@ const { spawn } = require('child_process');
         </div>
       </div>
 
+      <!-- === STEP 5: CONFIRM & LAUNCH === -->
       <div id="step-confirm" class="step hidden">
         <div class="step-header">Confirm & Launch</div>
         <div class="summary" id="summary"></div>
@@ -625,6 +650,7 @@ const { spawn } = require('child_process');
     </div>
   </div>
 
+  <!-- Toast Notification element -->
   <div id="toast" class="toast"></div>
 
   <script>
@@ -1184,15 +1210,17 @@ module.exports = defineConfig({
   }
 
   // ========== BROWSER PATH SETUP ==========
-  const myBrowsersPath = path.join(process.cwd(), 'my-browsers');
+  // This is already set for the parent process.
+  // We just need to ensure the child process (spawn) also gets it.
   const env = Object.assign({}, process.env);
   
   if (fs.existsSync(myBrowsersPath)) {
     env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
-    log('✓ PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
+    log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
   } else {
-    log('⚠ my-browsers folder not found - will use system Playwright browsers');
+    log('⚠ Child process: my-browsers folder not found - will use system Playwright browsers');
   }
+  // --- END BROWSER PATH SETUP ---
 
   // --- SET ALL ENV VARS ---
   env.START_PORT = String(selection.startPortIndex || '1');

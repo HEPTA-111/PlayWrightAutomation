@@ -298,6 +298,7 @@ if (Test-Path $pkgJson) {
 # Create run.bat
 Write-Host "  Creating run.bat..." -ForegroundColor Gray
 
+# --- UPDATED: $runBatContent now includes the environment variable fix ---
 $runBatContent = @'
 @echo off
 SETLOCAL
@@ -312,6 +313,11 @@ echo ========================================
 echo.
 echo Starting launcher...
 echo.
+
+REM --- BEGIN FIX: Set Browser Path Environment Variable ---
+SET "PLAYWRIGHT_BROWSERS_PATH=%BASE%my-browsers"
+echo [RUN.BAT] Set PLAYWRIGHT_BROWSERS_PATH to: %PLAYWRIGHT_BROWSERS_PATH%
+REM --- END FIX ---
 
 REM Use bundled portable node to run launcher
 "%BASE%portable-node\node.exe" "%BASE%launcher.js"
