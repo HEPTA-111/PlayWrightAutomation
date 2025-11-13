@@ -1,8 +1,7 @@
 @echo off
 SETLOCAL
+REM Base extraction folder
 SET BASE=%~dp0
-
-REM Ensure we are in the extraction folder
 cd /d "%BASE%"
 
 REM Ensure portable node exists
@@ -12,18 +11,23 @@ IF NOT EXIST "%BASE%portable-node\node.exe" (
   exit /b 2
 )
 
-REM Ensure bundled my-browsers path is used by Playwright
+REM Use bundled Playwright browsers if present
 SET PLAYWRIGHT_BROWSERS_PATH=%BASE%my-browsers
 
-REM Log file
-set LOG=%BASE%launcher_stdout.log
+REM Log file (in the extracted folder)
+SET LOG=%BASE%launcher_stdout.log
 echo ===== Launcher run started at %DATE% %TIME% > "%LOG%"
 
-REM Run launcher and capture output
+REM Run launcher.js and append stdout+stderr to log
 "%BASE%portable-node\node.exe" "%BASE%launcher.js" >> "%LOG%" 2>&1
-set EXITCODE=%ERRORLEVEL%
+SET EXITCODE=%ERRORLEVEL%
 
 echo ===== Launcher exited with code %EXITCODE% at %DATE% %TIME% >> "%LOG%"
 type "%LOG%"
+
+REM Show the exit code in the console, then pause so a user can read errors
+echo.
+echo Launcher exit code: %EXITCODE%
 pause
+
 exit /b %EXITCODE%

@@ -19,26 +19,65 @@ const { spawn } = require('child_process');
   };
   // -------------------------------------------------------------
 
-  function log(...args) { console.log('Launcher:', ...args); }
-  function errlog(...args) { console.error('Launcher:', ...args); }
+  function log(...args) { 
+    const msg = ['[LAUNCHER]', ...args].join(' ');
+    console.log(msg); 
+  }
+  
+  function errlog(...args) { 
+    const msg = ['[LAUNCHER ERROR]', ...args].join(' ');
+    console.error(msg); 
+  }
 
-  // Diagnostic helper to list a directory (best-effort)
+  // Diagnostic helper to list a directory
   function listFolder(folder, limit = 50) {
     try {
-      if (!fs.existsSync(folder)) return `${folder} (not found)`;
+      if (!fs.existsSync(folder)) return `${folder} (NOT FOUND)`;
       const entries = fs.readdirSync(folder).slice(0, limit);
-      return `${folder} => ${entries.join(', ')}`;
+      return `${folder} => [${entries.join(', ')}]`;
     } catch (e) {
-      return `Error listing ${folder}: ${String(e)}`;
+      return `ERROR listing ${folder}: ${e.message}`;
     }
   }
 
-  // Launch headed Playwright browser for the small UI
+  // Verify critical paths and log diagnostics
+  function verifyEnvironment() {
+    log('=== ENVIRONMENT CHECK ===');
+    log('Working directory:', process.cwd());
+    log('Node version:', process.version);
+    log('Platform:', process.platform);
+    
+    const critical = [
+      'node_modules',
+      'tests',
+      'my-browsers',
+      'portable-node'
+    ];
+    
+    critical.forEach(dir => {
+      const fullPath = path.join(process.cwd(), dir);
+      const exists = fs.existsSync(fullPath);
+      log(`${exists ? '✓' : '✗'} ${dir}: ${exists ? 'EXISTS' : 'MISSING'}`);
+    });
+    
+    log('Root contents:', listFolder(process.cwd(), 100));
+    log('=========================');
+  }
+
+  verifyEnvironment();
+
+  // Launch headed Playwright browser for the UI
   let browser;
   try {
-    browser = await chromium.launch({ headless: false, args: ['--start-maximized'] });
+    log('Launching Playwright browser for GUI...');
+    browser = await chromium.launch({ 
+      headless: false, 
+      args: ['--start-maximized'] 
+    });
+    log('✓ Browser launched successfully');
   } catch (e) {
-    errlog('Failed to launch Playwright browser for UI:', e);
+    errlog('Failed to launch Playwright browser:', e.message);
+    errlog('Stack:', e.stack);
     process.exit(1);
   }
 
@@ -53,17 +92,19 @@ const { spawn } = require('child_process');
 
   try {
     await page.exposeFunction('onSelection', (selection) => {
+      log('Selection received from UI:', JSON.stringify(selection, null, 2));
       resolveSelection(selection);
     });
   } catch (e) {
-    errlog('Failed to expose onSelection to page:', e);
+    errlog('Failed to expose onSelection function:', e.message);
     try { await browser.close(); } catch (_) {}
     process.exit(1);
   }
 
   page.on('close', () => {
-    rejectSelection(new Error('UI page closed before selection'));
+    rejectSelection(new Error('UI page closed before selection was made'));
   });
+  
   browser.on('disconnected', () => {
     rejectSelection(new Error('Browser disconnected before selection'));
   });
@@ -72,12 +113,11 @@ const { spawn } = require('child_process');
     Array.from({ length: 10 }, (_, i) => 101 + i)
       .map(g => `<div class="gateway" data-gateway="${g}">Gateway ${g}</div>`).join('');
 
-  // Full HTML (modern styled) — the page will call window.onSelection(...) when the user confirms
   const fullHtml = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Playwright Launcher</title>
+  <title>AutoM Launcher</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{--bg:#f5f7fb;--card:#ffffff;--muted:#6b7280;--accent:#0b63ff;}
@@ -110,7 +150,6 @@ const { spawn } = require('child_process');
     .field{margin-top:10px;display:flex;gap:10px;align-items:center;}
     input[type=number]{width:110px;padding:8px;border-radius:8px;border:1px solid #ddd;}
     .summary{margin-top:12px;padding:12px;border-radius:8px;background:linear-gradient(180deg,rgba(11,99,255,0.06),rgba(11,99,255,0.02));font-size:13px;}
-    footer{margin-top:18px;display:flex;justify-content:space-between;align-items:center;}
   </style>
 </head>
 <body>
@@ -118,14 +157,14 @@ const { spawn } = require('child_process');
     <div class="card">
       <header>
         <div>
-          <h1>Automata</h1>
-          <div class="subtitle">Pick a process, provider, MobileX options and starting port.</div>
+          <h1>AutoM</h1>
+          <div class="subtitle">Configure your automation process</div>
         </div>
       </header>
 
       <div id="step-process" class="step">
         <div style="display:flex;justify-content:space-between;">
-          <div style="font-weight:700">Step 1 — Choose Process</div>
+          <div style="font-weight:700">Step 1 – Choose Process</div>
           <div class="muted">Activation or Refill</div>
         </div>
         <div class="grid">
@@ -136,7 +175,7 @@ const { spawn } = require('child_process');
       </div>
 
       <div id="step-provider" class="step hidden">
-        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 2 — Choose Provider</div><div class="muted">AT&T • t-mobile • Spectrum • MobileX</div></div>
+        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 2 – Choose Provider</div><div class="muted">AT&T • t-mobile • Spectrum • MobileX</div></div>
         <div class="grid" style="margin-top:12px;">
           <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div></div></div>
           <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">t-mobile</div></div></div>
@@ -147,47 +186,45 @@ const { spawn } = require('child_process');
       </div>
 
       <div id="step-mobilex" class="step hidden">
-        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 3 — MobileX Options</div><div class="muted">Choose gateway (101–110) and link type (Activation only)</div></div>
+        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700">Step 3 – MobileX Options</div><div class="muted">Gateway, port, and link type</div></div>
         <div style="margin-top:12px;">
-          <div style="font-weight:600;margin-bottom:8px;">Choose Gateway</div>
+          <div style="font-weight:600;margin-bottom:8px;">Choose Gateway (101–110)</div>
           <div class="gateway-box" id="gateway-box">${makeGatewayHtml()}</div>
 
-          <div style="font-weight:600;margin-top:12px;">Choose starting port (A1–A64)</div>
+          <div style="font-weight:600;margin-top:12px;">Starting Port (A1–A64)</div>
           <div class="field">
-            <label class="muted">Start port index:</label>
+            <label class="muted">Port index:</label>
             <input id="start-port" type="number" min="1" max="64" value="1" />
-            <div class="muted">This will be used as A{index} in the test loop</div>
+            <div class="muted">Loop starts at A{index}</div>
           </div>
 
-          <!-- Link type section: hidden for Refill -->
           <div id="link-type-section" style="margin-top:12px;">
-            <div style="font-weight:600;margin-bottom:8px;">Link type</div>
+            <div style="font-weight:600;margin-bottom:8px;">Link Type</div>
             <div style="display:flex;gap:10px;">
-              <div class="option linktype" data-link="external"><div class="label">External</div><div class="muted" style="margin-left:auto">external link</div></div>
-              <div class="option linktype" data-link="internal"><div class="label">Internal</div><div class="muted" style="margin-left:auto">internal</div></div>
+              <div class="option linktype" data-link="external"><div class="label">External</div></div>
+              <div class="option linktype" data-link="internal"><div class="label">Internal</div></div>
             </div>
           </div>
 
-          <div class="controls" style="margin-top:14px;"><div class="muted">When ready, finish to save & run</div><div><button class="btn ghost small" id="mobilex-back">← Back</button><button class="btn primary small" id="mobilex-finish">Finish</button></div></div>
+          <div class="controls" style="margin-top:14px;"><div class="muted">Review and finish</div><div><button class="btn ghost small" id="mobilex-back">← Back</button><button class="btn primary small" id="mobilex-finish">Finish</button></div></div>
         </div>
       </div>
 
       <div id="step-confirm" class="step hidden">
         <div style="font-weight:700">Confirm & Launch</div>
         <div class="summary" id="summary"></div>
-        <div class="controls"><div class="muted">Review choices</div><div><button class="btn ghost small" id="confirm-back">← Back</button><button class="btn primary small" id="confirm-launch">Launch</button></div></div>
+        <div class="controls"><div class="muted">Review your configuration</div><div><button class="btn ghost small" id="confirm-back">← Back</button><button class="btn primary small" id="confirm-launch">Launch</button></div></div>
       </div>
 
     </div>
   </div>
 
   <script>
-    const state = { process:null, provider:null, gateway:null, linkType:null, startPortIndex:29 };
+    const state = { process:null, provider:null, gateway:null, linkType:null, startPortIndex:1 };
 
     function q(sel, all=false) { return all ? Array.from(document.querySelectorAll(sel)) : document.querySelector(sel); }
     function clearSelected(selector) { q(selector, true).forEach(e=>e.classList.remove('selected')); }
 
-    // Process selection
     q('#opt-activation').addEventListener('click', ()=>{ clearSelected('.option'); q('#opt-activation').classList.add('selected'); state.process='Activation'; });
     q('#opt-refill').addEventListener('click', ()=>{ clearSelected('.option'); q('#opt-refill').classList.add('selected'); state.process='Refill'; });
     q('#proc-reset').addEventListener('click', ()=>{ state.process=null; clearSelected('.option'); });
@@ -198,7 +235,6 @@ const { spawn } = require('child_process');
       q('#step-provider').classList.remove('hidden');
     });
 
-    // Provider selection
     q('.provider', true).forEach(el=>{
       el.addEventListener('click', () => {
         clearSelected('.provider');
@@ -214,16 +250,13 @@ const { spawn } = require('child_process');
       if (!state.provider) { alert('Please choose a provider'); return; }
       q('#step-provider').classList.add('hidden');
       if (state.provider === 'MobileX') {
-        // Show MobileX options; show/hide link-type depending on process
         q('#step-mobilex').classList.remove('hidden');
         if (state.process === 'Refill') {
-          // For Refill, hide link-type selection and clear any previous linkType
           const linkSection = q('#link-type-section');
           if (linkSection) linkSection.style.display = 'none';
           state.linkType = null;
           clearSelected('.linktype');
         } else {
-          // For Activation, show link-type
           const linkSection = q('#link-type-section');
           if (linkSection) linkSection.style.display = '';
         }
@@ -233,7 +266,6 @@ const { spawn } = require('child_process');
       }
     });
 
-    // MobileX interactions
     q('#gateway-box').querySelectorAll('.gateway').forEach(g=>{
       g.addEventListener('click', () => {
         clearSelected('.gateway'); g.classList.add('selected'); state.gateway = g.dataset.gateway;
@@ -246,11 +278,10 @@ const { spawn } = require('child_process');
       });
     });
 
-    // Start port input
     const startPortInput = q('#start-port');
     startPortInput.addEventListener('input', () => {
-      let v = parseInt(startPortInput.value || '29', 10);
-      if (isNaN(v)) v = 29;
+      let v = parseInt(startPortInput.value || '1', 10);
+      if (isNaN(v)) v = 1;
       if (v < 1) v = 1;
       if (v > 64) v = 64;
       startPortInput.value = String(v);
@@ -261,9 +292,8 @@ const { spawn } = require('child_process');
 
     q('#mobilex-finish').addEventListener('click', ()=> {
       if (!state.gateway) { alert('Please choose a gateway'); return; }
-      // Only require linkType for Activation; Refill skips link-type
       if (state.process === 'Activation' && !state.linkType) { alert('Please choose a link type'); return; }
-      state.startPortIndex = parseInt(startPortInput.value || '29', 10) || 29;
+      state.startPortIndex = parseInt(startPortInput.value || '1', 10) || 1;
       updateSummary();
       q('#step-mobilex').classList.add('hidden'); q('#step-confirm').classList.remove('hidden');
     });
@@ -277,9 +307,9 @@ const { spawn } = require('child_process');
         if (state.process === 'Activation') {
           s.push('<strong>Link:</strong> ' + (state.linkType || '-'));
         } else {
-          s.push('<strong>Link:</strong> (not applicable for Refill)');
+          s.push('<strong>Link:</strong> N/A (Refill)');
         }
-        s.push('<strong>Start port (index):</strong> A' + (state.startPortIndex || '-'));
+        s.push('<strong>Start Port:</strong> A' + (state.startPortIndex || '-'));
       }
       q('#summary').innerHTML = s.map(x => '<div style="margin-bottom:6px;">'+x+'</div>').join('');
     }
@@ -289,17 +319,12 @@ const { spawn } = require('child_process');
       if (state.provider === 'MobileX') q('#step-mobilex').classList.remove('hidden'); else q('#step-provider').classList.remove('hidden');
     });
 
-    // Final launch — call node-exposed function
     q('#confirm-launch').addEventListener('click', ()=> {
-      // call the Node-side function if available
       if (typeof window.onSelection === 'function') {
-        // ensure the selection's linkType remains null for Refill
         const payload = Object.assign({}, state, { timestamp: Date.now() });
         window.onSelection(payload);
       } else {
-        // fallback if not available
-        window.__selection = Object.assign({}, state, { timestamp: Date.now() });
-        alert('Launcher bridge not available; selection stored to window.__selection');
+        alert('ERROR: Launcher bridge not available!');
       }
     });
   </script>
@@ -308,40 +333,49 @@ const { spawn } = require('child_process');
 
   try {
     await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
+    log('✓ UI loaded successfully');
   } catch (e) {
-    errlog('Failed to render UI content:', e);
+    errlog('Failed to render UI:', e.message);
     try { await browser.close(); } catch(_) {}
     process.exit(1);
   }
 
   let selection;
   try {
+    log('Waiting for user selection...');
     selection = await selectionPromise;
   } catch (e) {
-    errlog('wait for selection failed:', e);
+    errlog('Selection failed:', e.message);
     try { await browser.close(); } catch (_) {}
     process.exit(1);
   }
 
-  // Save selection to disk (useful when running from package)
+  // Save selection
   const outPath = path.join(process.cwd(), 'selection.json');
   try {
     fs.writeFileSync(outPath, JSON.stringify(selection, null, 2), 'utf8');
-    log('selection saved to', outPath);
-    log('selection =>', selection);
+    log('✓ Selection saved:', outPath);
   } catch (e) {
-    errlog('Failed to write selection.json:', e);
+    errlog('Failed to save selection.json:', e.message);
   }
 
-  try { await browser.close(); } catch (e) {}
+  try { 
+    await browser.close(); 
+    log('✓ UI browser closed');
+  } catch (e) {
+    log('Warning: Error closing browser:', e.message);
+  }
 
-  // decide which test file to run
+  // ========== TEST EXECUTION SETUP ==========
+  log('=== CONFIGURING TEST EXECUTION ===');
+
   const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
   const gateway = String(selection.gateway || '');
   const testIndex = gatewayToTestMap[gateway];
 
   if (typeof testIndex === 'undefined') {
-    errlog(`No mapping found for gateway ${gateway}. Edit gatewayToTestMap at top of launcher.js.`);
+    errlog(`No test mapping for gateway ${gateway}`);
+    errlog('Valid gateways:', Object.keys(gatewayToTestMap).join(', '));
     process.exit(1);
   }
 
@@ -350,56 +384,114 @@ const { spawn } = require('child_process');
   const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
   const specPath = path.join(process.cwd(), 'tests', 'mobilex', procFolder, specFileName);
 
+  log('Process folder:', procFolder);
+  log('Gateway:', gateway, '→ Test index:', testIndex);
+  log('Spec file:', specFileName);
+  log('Full spec path:', specPath);
+
   if (!fs.existsSync(specPath)) {
-    // helpful diagnostics if spec missing inside extracted bundle
-    errlog(`Expected test file not found: ${specPath}`);
-    errlog('Listing bundle root and tests folder for debugging:');
-    errlog('Root listing: ' + listFolder(process.cwd(), 200));
-    errlog('tests listing: ' + listFolder(path.join(process.cwd(), 'tests'), 200));
+    errlog('TEST FILE NOT FOUND:', specPath);
+    errlog('Tests folder contents:', listFolder(path.join(process.cwd(), 'tests'), 200));
+    errlog('MobileX folder contents:', listFolder(path.join(process.cwd(), 'tests', 'mobilex'), 200));
+    errlog(`${procFolder} folder contents:`, listFolder(path.join(process.cwd(), 'tests', 'mobilex', procFolder), 200));
     process.exit(1);
   }
 
-  let relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+  log('✓ Test file exists');
 
-  // If a playwright config exists in the bundle, instruct Playwright to use it explicitly
+  const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+
+  // ========== PLAYWRIGHT CONFIG SETUP ==========
+  log('=== PLAYWRIGHT CONFIG SETUP ===');
+  
   let configArg = '';
   const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
   const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+  
   if (fs.existsSync(cfgTs)) {
     configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
+    log('✓ Using playwright.config.ts');
   } else if (fs.existsSync(cfgJs)) {
     configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
+    log('✓ Using playwright.config.js');
   } else {
-    // no config found — provide helpful diagnostics (we will still try to run without config)
-    log('Warning: No playwright.config.ts/js found in current folder. Playwright may not have projects defined.');
-    log('Bundle root listing:', listFolder(process.cwd(), 200));
+    errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
+    
+    const emergencyConfig = `// Emergency config created by launcher
+const { defineConfig, devices } = require('@playwright/test');
+
+module.exports = defineConfig({
+  testDir: './tests',
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  workers: 1,
+  reporter: 'html',
+  use: {
+    trace: 'on-first-retry',
+    headless: false,
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+});
+`;
+    
+    const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
+    try {
+      fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
+      log('✓ Emergency config created:', emergencyPath);
+      configArg = ` --config="${emergencyPath.split(path.sep).join('/')}"`;
+    } catch (e) {
+      errlog('✗ FAILED to create emergency config:', e.message);
+      errlog('Cannot proceed without config file');
+      process.exit(1);
+    }
   }
 
-  // If my-browsers exists in bundle, set PLAYWRIGHT_BROWSERS_PATH so Playwright will use bundled browsers
+  // ========== BROWSER PATH SETUP ==========
   const myBrowsersPath = path.join(process.cwd(), 'my-browsers');
   const env = Object.assign({}, process.env);
+  
   if (fs.existsSync(myBrowsersPath)) {
     env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
-    log('Set PLAYWRIGHT_BROWSERS_PATH to bundled my-browsers');
+    log('✓ PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
+  } else {
+    log('⚠ my-browsers folder not found - will use system Playwright browsers');
   }
 
-  // Pass START_PORT env var for tests
-  env.START_PORT = String(selection.startPortIndex || '29');
+  // Set START_PORT environment variable
+  env.START_PORT = String(selection.startPortIndex || '1');
+  log('✓ START_PORT set to:', env.START_PORT);
 
-  // Build the command
+  // ========== FINAL COMMAND ==========
   const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
-  log('Spawning:', cmd);
+  
+  log('=== LAUNCHING PLAYWRIGHT ===');
+  log('Command:', cmd);
+  log('Working dir:', process.cwd());
+  log('============================');
 
-  // Spawn in shell so quoting works on Windows
-  const child = spawn(cmd, { shell: true, stdio: 'inherit', env });
+  const child = spawn(cmd, { 
+    shell: true, 
+    stdio: 'inherit', 
+    env,
+    cwd: process.cwd()
+  });
 
   child.on('exit', (code) => {
-    log('Playwright test process exited with code', code);
+    log('=== TEST EXECUTION COMPLETED ===');
+    log('Exit code:', code);
     process.exit(code === null ? 0 : code);
   });
 
   child.on('error', (e) => {
-    errlog('Failed to start Playwright test process:', e);
+    errlog('=== SPAWN ERROR ===');
+    errlog('Failed to start Playwright:', e.message);
+    errlog('Stack:', e.stack);
     process.exit(1);
   });
 
