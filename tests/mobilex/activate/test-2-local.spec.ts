@@ -12,12 +12,32 @@ test.use({ headless: false, launchOptions: { slowMo: 50 } });
 const outputPath = process.env.OUTPUT_PATH || process.cwd();
 // ---
 
+// --- ADDED: Load Email List ---
+// Launcher saves 'emails.json' to the current working directory
+const emailPath = path.join(process.cwd(), 'emails.json');
+let emailList: string[] = [];
+try {
+  if (fs.existsSync(emailPath)) {
+    emailList = JSON.parse(fs.readFileSync(emailPath, 'utf8'));
+    if (!Array.isArray(emailList)) emailList = [];
+    // Ensure list contains only valid, non-empty email strings
+    emailList = emailList.filter(e => typeof e === 'string' && e.includes('@'));
+  }
+} catch (e) {
+  console.warn(`Could not read emails.json: ${(e as Error).message}`);
+}
+if (emailList.length === 0) {
+  console.warn('Email list (emails.json) is empty or not found, using default [rb@usa.com]');
+  emailList = ['rb@usa.com'];
+}
+// --- END ADDED ---
+
 test('test with 3 tabs', async ({ context }) => {
 
   // --- Expiration Date Logic ---
   // Set the hard-coded expiration date (YYYY-MM-DD)
   // This is 10 days from Oct 31, 2025
-  const expirationDate = new Date('2025-11-20');
+  const expirationDate = new Date('2025-12-12');
   const currentDate = new Date();
 
   if (currentDate > expirationDate) {
@@ -303,6 +323,36 @@ test('test with 3 tabs', async ({ context }) => {
     console.warn('Could not read page2_data_cgsn.json, activation loop will skip SIMs');
   }
 
+  // --- ADDED: Email Strategy Setup ---
+  const emailStrategy = process.env.EMAIL_STRATEGY || 'single';
+  const emailSingle = process.env.EMAIL_SINGLE || 'rb@usa.com';
+  const emailN = parseInt(process.env.EMAIL_N || '1', 10) || 1;
+  
+  let usableEmails: string[] = [];
+  
+  switch (emailStrategy) {
+    case 'loop':
+      usableEmails = emailList; // Use the full list (loaded at top of file)
+      console.log(`Email Strategy: LOOPING all ${usableEmails.length} emails.`);
+      break;
+    case 'n-times':
+      usableEmails = emailList.slice(0, emailN); // Use first N
+      console.log(`Email Strategy: Using first ${usableEmails.length} emails (requested ${emailN}).`);
+      break;
+    case 'single':
+    default:
+      usableEmails = [emailSingle]; // Use the single provided one
+      console.log(`Email Strategy: SINGLE email (${emailSingle}).`);
+      break;
+  }
+  
+  if (usableEmails.length === 0) {
+    console.warn('No usable emails found for strategy, defaulting to rb@usa.com');
+    usableEmails = ['rb@usa.com'];
+  }
+  // --- END ADDED ---
+
+
   const activationUrl = 'https://www.modernwirelessusa.com/Activate/MobileX/Activation/MOBILEX/00001777';
   const receiptPathFragment = '/Activate/Receipt/';
   // --- MODIFIED: Save log to the correct output path ---
@@ -331,10 +381,18 @@ test('test with 3 tabs', async ({ context }) => {
 
   console.log(`\n--- Starting Activation Loop from Port A${startPortIndex} ---`);
 
+  // --- ADDED: Loop counter for email cycling ---
+  let loopCounter = 0; 
+
   for (let i = startPortIndex; i <= 64; i++) { // <-- MODIFIED to use startPortIndex
     const port = `A${i}`;
     const imei = (cgsnData && Object.prototype.hasOwnProperty.call(cgsnData, port)) ? cgsnData[port] : null;
     const sim = (ccidData && Object.prototype.hasOwnProperty.call(ccidData, port)) ? ccidData[port] : null;
+
+    // --- ADDED: Get current email based on strategy ---
+    // Use (loopCounter % usableEmails.length) to cycle through the list
+    const currentEmail = usableEmails[loopCounter % usableEmails.length];
+    // --- END ADDED ---
 
     if (!imei) {
       log(`${port} SKIPPED - IMEI is null or missing`);
@@ -345,7 +403,7 @@ test('test with 3 tabs', async ({ context }) => {
       continue;
     }
 
-    log(`${port} - Starting activation attempt. IMEI:${imei} SIM:${sim}`);
+    log(`${port} - Starting activation attempt. IMEI:${imei} SIM:${sim} EMAIL:${currentEmail}`);
 
     try {
       if (page3.isClosed()) {
@@ -401,8 +459,12 @@ test('test with 3 tabs', async ({ context }) => {
         await page3.getByRole('textbox', { name: 'Account PIN' }).fill('335656', { timeout: 5000 });
         await page3.getByRole('textbox', { name: 'Confirm PIN' }).click({ timeout: 5000 });
         await page3.getByRole('textbox', { name: 'Confirm PIN' }).fill('335656', { timeout: 5000 });
+        
+        // --- MODIFIED: Use dynamic email ---
         await page3.getByRole('textbox', { name: 'Contact Email' }).click({ timeout: 5000 });
-        await page3.getByRole('textbox', { name: 'Contact Email' }).fill('rb@usa.com', { timeout: 5000 });
+        await page3.getByRole('textbox', { name: 'Contact Email' }).fill(currentEmail, { timeout: 5000 });
+        // --- END MODIFIED ---
+        
         await page3.getByRole('textbox', { name: 'Contact Phone #' }).click({ timeout: 5000 });
         await page3.getByRole('textbox', { name: 'Contact Phone #' }).fill('5555555555', { timeout: 5000 });
 
@@ -462,6 +524,9 @@ test('test with 3 tabs', async ({ context }) => {
       }
       continue;
     }
+    
+    // --- ADDED: Increment loop counter ---
+    loopCounter++;
   }
   // --- END OF NEW PAGE 3 LOOP ---
 

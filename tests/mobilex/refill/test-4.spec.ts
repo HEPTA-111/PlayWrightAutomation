@@ -37,10 +37,10 @@ test('test with 2 tabs (cnum + refill)', async ({ context }) => {
 
   // --- Tab 1: Page 1 with at+cnum (Scrape Phone Numbers) ---
   console.log('--- Starting Page 1 (Scraping at+cnum) ---');
-  await page1.goto('http://101.230.216.39:50932/login_en.html');
+  await page1.goto('http://104.230.216.39:50932/login_en.html');
   await page1.locator('#accountID').fill('root');
   await page1.locator('#passwordID2').click();
-  await page1.locator('#passwordID').fill('gw1013356');
+  await page1.locator('#passwordID').fill('gw1043356');
   await page1.getByText('Submit').click();
 
   const mainFrame1 = await page1.getByText('</body> </html>').contentFrame();
