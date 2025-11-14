@@ -57,10 +57,10 @@ test('test with 3 tabs', async ({ context }) => {
   const page3 = await context.newPage();
 
   // --- Tab 1: Page 1 with at+cgsn ---
-  await page1.goto('http://103.230.216.39:50932/login_en.html');
+  await page1.goto('http://192.168.1.104/login_en.html');
   await page1.locator('#accountID').fill('root');
   await page1.locator('#passwordID2').click();
-  await page1.locator('#passwordID').fill('gw1033356');
+  await page1.locator('#passwordID').fill('gw1043356');
   await page1.getByText('Submit').click();
 
   const mainFrame1 = await page1.getByText('</body> </html>').contentFrame();
@@ -128,7 +128,7 @@ test('test with 3 tabs', async ({ context }) => {
   // --- Tab 2: Page 2 with at+ccid ---
   console.log('\n--- Starting Page 2 ---');
 
-  await page2.goto('http://103.230.216.39:50932/main_en.html');
+  await page2.goto('http://192.168.1.104/main_en.html');
   await page2.waitForTimeout(2500);
 
   let mainFrame2 = await page2.getByText('</body> </html>').contentFrame();

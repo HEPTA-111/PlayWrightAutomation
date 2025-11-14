@@ -515,7 +515,7 @@ if (fs.existsSync(myBrowsersPath)) {
         <div class="step-header">Step 2 – Choose Provider</div>
         <div class="grid">
           <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div></div></div>
-          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile</div></div></div>
+          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile (Gen-Mo) </div></div></div>
           <div class="option provider" data-provider="Spectrum"><span class="swatch spectrum"></span><div><div class="label">Spectrum</div></div></div>
           <div class="option provider" data-provider="MobileX"><span class="swatch mobilex"></span><div><div class="label">MobileX</div></div></div>
         </div>
