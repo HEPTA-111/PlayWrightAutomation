@@ -17,6 +17,7 @@ if (fs.existsSync(myBrowsersPath)) {
 
 (async () => {
   // --------- CONFIG: gateway -> test index (editable) ----------
+  // This map is for ACTIVATION only. Reload logic is now separate.
   const gatewayToTestMap = {
     '101': 3,
     '102': 2,
@@ -31,14 +32,14 @@ if (fs.existsSync(myBrowsersPath)) {
   };
   // -------------------------------------------------------------
 
-  function log(...args) { 
+  function log(...args) {
     const msg = ['[LAUNCHER]', ...args].join(' ');
-    console.log(msg); 
+    console.log(msg);
   }
-  
-  function errlog(...args) { 
+
+  function errlog(...args) {
     const msg = ['[LAUNCHER ERROR]', ...args].join(' ');
-    console.error(msg); 
+    console.error(msg);
   }
 
   // Diagnostic helper to list a directory
@@ -58,20 +59,20 @@ if (fs.existsSync(myBrowsersPath)) {
     log('Working directory:', process.cwd());
     log('Node version:', process.version);
     log('Platform:', process.platform);
-    
+
     const critical = [
       'node_modules',
       'tests',
       'my-browsers',
       'portable-node'
     ];
-    
+
     critical.forEach(dir => {
       const fullPath = path.join(process.cwd(), dir);
       const exists = fs.existsSync(fullPath);
       log(`${exists ? '✓' : '✗'} ${dir}: ${exists ? 'EXISTS' : 'MISSING'}`);
     });
-    
+
     log('Root contents:', listFolder(process.cwd(), 100));
     log('=========================');
   }
@@ -82,9 +83,9 @@ if (fs.existsSync(myBrowsersPath)) {
   let browser;
   try {
     log('Launching Playwright browser for GUI...');
-    browser = await chromium.launch({ 
-      headless: false, 
-      args: ['--start-maximized'] 
+    browser = await chromium.launch({
+      headless: false,
+      args: ['--start-maximized']
     });
     log('✓ Browser launched successfully');
   } catch (e) {
@@ -126,45 +127,49 @@ if (fs.existsSync(myBrowsersPath)) {
       }
     });
 
-    // --- ADDED: Run Reload Ports function ---
+    // --- UPDATED: Run Reload Ports function ---
     await page.exposeFunction('runReloadPorts', (gateway, ports) => {
       return new Promise((resolve) => {
-        const testIndex = gatewayToTestMap[gateway];
-        if (typeof testIndex === 'undefined') {
-          errlog(`No test mapping for gateway ${gateway}`);
-          return resolve({ success: false, error: `No test mapping for gateway ${gateway}` });
+
+        // --- THIS IS THE NEW MAPPING LOGIC ---
+        const gatewayNum = parseInt(gateway, 10);
+        if (isNaN(gatewayNum) || gatewayNum < 101 || gatewayNum > 110) {
+          errlog(`Invalid gateway number: ${gateway}`);
+          return resolve({ success: false, error: `Invalid gateway number: ${gateway}` });
         }
-        
-        const specFileName = `runports${testIndex}.ts`;
+        // 101 -> 1, 102 -> 2, ... 110 -> 10
+        const testIndex = gatewayNum - 100;
+        // --- END NEW MAPPING LOGIC ---
+
+        const specFileName = `runports${testIndex}.spec.ts`;
         const specPath = path.join(process.cwd(), 'tests', 'reload_ports', specFileName);
 
         if (!fs.existsSync(specPath)) {
           errlog('TEST FILE NOT FOUND:', specPath);
           return resolve({ success: false, error: `Test file not found: ${specPath}` });
         }
-        
+
         const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
         const cmd = `npx playwright test "${relSpec}" --headed --project=chromium --workers=1`;
-        
+
         const env = Object.assign({}, process.env);
         env.RELOAD_PORTS = ports || ''; // Pass ports as env var
         log('✓ RELOAD_PORTS set to:', env.RELOAD_PORTS);
-        
+
         // This env var should already be set, but we set it again for the child
-        // process just in case.
         env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
 
         log('=== LAUNCHING RELOAD SCRIPT ===');
         log('Command:', cmd);
-        
+
         const child = spawn(cmd, { shell: true, stdio: 'inherit', env, cwd: process.cwd() });
-        
+
         child.on('exit', (code) => {
           log('=== RELOAD SCRIPT COMPLETED ===');
           log('Exit code:', code);
           resolve({ success: code === 0, code: code });
         });
-        
+
         child.on('error', (e) => {
           errlog('=== RELOAD SPAWN ERROR ===');
           errlog('Failed to start script:', e.message);
@@ -175,14 +180,14 @@ if (fs.existsSync(myBrowsersPath)) {
 
   } catch (e) {
     errlog('Failed to expose function(s):', e.message);
-    try { await browser.close(); } catch (_) {}
+    try { await browser.close(); } catch (_) { }
     process.exit(1);
   }
 
   page.on('close', () => {
     rejectSelection(new Error('UI page closed before selection was made'));
   });
-  
+
   browser.on('disconnected', () => {
     rejectSelection(new Error('Browser disconnected before selection'));
   });
@@ -196,7 +201,7 @@ if (fs.existsSync(myBrowsersPath)) {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>AutoM Launcher</title>
+  <title>AutoM8 Launcher</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
@@ -449,7 +454,7 @@ if (fs.existsSync(myBrowsersPath)) {
     <div class="card">
       <header>
         <div>
-          <h1>AutoM</h1>
+          <h1>AutoM8</h1>
           <div class="subtitle">Configure your automation process</div>
         </div>
         <div style="margin-left:auto;">
@@ -515,7 +520,7 @@ if (fs.existsSync(myBrowsersPath)) {
         <div class="step-header">Step 2 – Choose Provider</div>
         <div class="grid">
           <div class="option provider" data-provider="AT&T"><span class="swatch att"></span><div><div class="label">AT&amp;T</div></div></div>
-          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile (Gen-Mo) </div></div></div>
+          <div class="option provider" data-provider="t-mobile"><span class="swatch tmobile"></span><div><div class="label">T-Mobile</div></div></div>
           <div class="option provider" data-provider="Spectrum"><span class="swatch spectrum"></span><div><div class="label">Spectrum</div></div></div>
           <div class="option provider" data-provider="MobileX"><span class="swatch mobilex"></span><div><div class="label">MobileX</div></div></div>
         </div>
@@ -621,7 +626,7 @@ if (fs.existsSync(myBrowsersPath)) {
           <div class="form-label">Ports to Reload (Optional)</div>
           <input id="reload-ports-input" type="text" placeholder="e.g., 1, 5, 10-15 (leave blank for all)" />
           <div class="muted" style="margin-top: 6px;">
-            Leave blank to let the script decide. Otherwise, use commas or ranges.
+            Leave blank to run for all 64 ports.
           </div>
         </div>
         
@@ -973,7 +978,6 @@ if (fs.existsSync(myBrowsersPath)) {
           saveBtn.classList.add('hidden');
           cancelBtn.classList.add('hidden');
         });
-        
         // Save flow
         saveBtn.addEventListener('click', () => {
           const newEmail = editInput.value.trim();
@@ -985,16 +989,13 @@ if (fs.existsSync(myBrowsersPath)) {
           // Always revert UI
           cancelBtn.click();
         });
-        
+
         // Delete flow
         deleteBtn.addEventListener('click', () => {
-          if (confirm(\`Delete \${email}?\`)) {
-            state.emails.splice(index, 1);
-            persistEmails(); // Save to file
-            renderEmailList(); // Re-render
-          }
+          // Removed confirm() because Playwright auto-dismisses it
+          state.emails.splice(index, 1);
+          persistEmails();
         });
-        
         row.appendChild(text);
         row.appendChild(editInput);
         row.appendChild(actions);
@@ -1068,8 +1069,8 @@ if (fs.existsSync(myBrowsersPath)) {
       existingEmails = existingEmails.filter(e => typeof e === 'string' && e.includes('@'));
       log(`✓ Loaded ${existingEmails.length} emails from emails.json`);
     }
-  } catch (e) { 
-    log('Warning: No existing email file or error reading it.', e.message); 
+  } catch (e) {
+    log('Warning: No existing email file or error reading it.', e.message);
   }
   // --- END ADDED ---
 
@@ -1085,7 +1086,7 @@ if (fs.existsSync(myBrowsersPath)) {
 
   } catch (e) {
     errlog('Failed to render UI:', e.message);
-    try { await browser.close(); } catch(_) {}
+    try { await browser.close(); } catch (_) { }
     process.exit(1);
   }
 
@@ -1095,7 +1096,7 @@ if (fs.existsSync(myBrowsersPath)) {
     selection = await selectionPromise;
   } catch (e) {
     errlog('Selection failed:', e.message);
-    try { await browser.close(); } catch (_) {}
+    try { await browser.close(); } catch (_) { }
     process.exit(1);
   }
 
@@ -1108,8 +1109,8 @@ if (fs.existsSync(myBrowsersPath)) {
     errlog('Failed to save selection.json:', e.message);
   }
 
-  try { 
-    await browser.close(); 
+  try {
+    await browser.close();
     log('✓ UI browser closed');
   } catch (e) {
     log('Warning: Error closing browser:', e.message);
@@ -1118,12 +1119,12 @@ if (fs.existsSync(myBrowsersPath)) {
   // ========== TEST EXECUTION SETUP ==========
   // This part only runs for 'Activation' or 'Refill'
   // 'Reload' is handled by the 'runReloadPorts' function
-  
+
   if (selection.process === 'Reload') {
     log('Reload process was handled by the UI. Launcher is exiting.');
     process.exit(0);
   }
-  
+
   log('=== CONFIGURING TEST EXECUTION ===');
 
   const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
@@ -1160,11 +1161,11 @@ if (fs.existsSync(myBrowsersPath)) {
 
   // ========== PLAYWRIGHT CONFIG SETUP ==========
   log('=== PLAYWRIGHT CONFIG SETUP ===');
-  
+
   let configArg = '';
   const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
   const cfgJs = path.join(process.cwd(), 'playwright.config.js');
-  
+
   if (fs.existsSync(cfgTs)) {
     configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
     log('✓ Using playwright.config.ts');
@@ -1173,7 +1174,7 @@ if (fs.existsSync(myBrowsersPath)) {
     log('✓ Using playwright.config.js');
   } else {
     errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
-    
+
     const emergencyConfig = `// Emergency config created by launcher
 const { defineConfig, devices } = require('@playwright/test');
 
@@ -1196,7 +1197,7 @@ module.exports = defineConfig({
   ],
 });
 `;
-    
+
     const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
     try {
       fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
@@ -1213,7 +1214,7 @@ module.exports = defineConfig({
   // This is already set for the parent process.
   // We just need to ensure the child process (spawn) also gets it.
   const env = Object.assign({}, process.env);
-  
+
   if (fs.existsSync(myBrowsersPath)) {
     env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
     log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
@@ -1237,15 +1238,15 @@ module.exports = defineConfig({
 
   // ========== FINAL COMMAND ==========
   const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
-  
+
   log('=== LAUNCHING PLAYWRIGHT ===');
   log('Command:', cmd);
   log('Working dir:', process.cwd());
   log('============================');
 
-  const child = spawn(cmd, { 
-    shell: true, 
-    stdio: 'inherit', 
+  const child = spawn(cmd, {
+    shell: true,
+    stdio: 'inherit',
     env,
     cwd: process.cwd()
   });

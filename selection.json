@@ -1,8 +1,8 @@
 {
-  "process": "Refill",
+  "process": "Activation",
   "provider": "MobileX",
-  "gateway": "104",
-  "linkType": null,
+  "gateway": "103",
+  "linkType": "external",
   "startPortIndex": 1,
   "emailStrategy": "single",
   "emailSingle": "rb@usa.com",
