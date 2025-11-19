@@ -19,7 +19,30 @@ export const GATEWAY_CONFIGS = {
     url: "http://104.XXX.XXX.XXX:PORT/login_en.html", // <-- UPDATE THIS URL
     password: "gw1043356"
   },
-  // Add 105-110 here when you are ready
+  "105": {
+    url: "http://105.XXX.XXX.XXX:PORT/login_en.html", // <-- UPDATE THIS URL
+    password: "gw1053356"
+  },
+  "106": {
+    url: "http://106.XXX.XXX.XXX:PORT/login_en.html", // <-- UPDATE THIS URL
+    password: "gw1063356"
+  },
+  "107": {
+    url: "http://107.230.216.39:50932/login_en.html", // This one should be correct
+    password: "gw1073356"
+  },
+  "108": {
+    url: "http://108.XXX.XXX.XXX:PORT/login_en.html", // <-- UPDATE THIS URL
+    password: "gw1083356"
+  },
+   "109": {
+    url: "http://109.230.216.39:50932/login_en.html", // This one should be correct
+    password: "gw1093356"
+  },
+  "110": {
+    url: "http://110.XXX.XXX.XXX:PORT/login_en.html", // <-- UPDATE THIS URL
+    password: "gw1103356"
+  },
 };
 
 // This is a type helper, no need to edit
