@@ -1,8 +1,7 @@
 import { type Page, type FrameLocator } from '@playwright/test';
-import * as GatewayConfig from '../reload_ports/gateway-config'; // FIXED: Correct path
+import * as GatewayConfig from '../reload_ports/gateway-config';
 import * as fs from 'fs';
 import * as path from 'path';
-
 /**
  * Represents scraped data for a single port
  */

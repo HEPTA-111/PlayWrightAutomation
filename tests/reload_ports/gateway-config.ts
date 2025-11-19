@@ -36,7 +36,7 @@ export const GATEWAY_CONFIGS = {
     password: "gw1083356"
   },
    "109": {
-    url: "http://109.230.216.39:50932/login_en.html", // This one should be correct
+    url: "http://109.XXX.XXX.XXX:PORT/login_en.html", // This one should be correct
     password: "gw1093356"
   },
   "110": {

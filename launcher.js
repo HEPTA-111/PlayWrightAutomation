@@ -15,6 +15,10 @@ if (fs.existsSync(myBrowsersPath)) {
 }
 // --- END FIX ---
 
+// --- Determine where to save output files ---
+const outputPath = process.env.OUTPUT_PATH || process.cwd();
+// ---
+
 (async () => {
   // --------- CONFIG: gateway -> test index (editable) ----------
   // This map is for ACTIVATION only. Reload logic is now separate.
@@ -173,6 +177,44 @@ if (fs.existsSync(myBrowsersPath)) {
         child.on('error', (e) => {
           errlog('=== RELOAD SPAWN ERROR ===');
           errlog('Failed to start script:', e.message);
+          resolve({ success: false, error: e.message });
+        });
+      });
+    });
+
+    // --- ADDED: Run Gateway Scrape function ---
+    await page.exposeFunction('runGatewayScrape', () => {
+      return new Promise((resolve) => {
+        const specPath = path.join(process.cwd(), 'tests', 'scrape', 'gateway-scraper.spec.ts');
+
+        if (!fs.existsSync(specPath)) {
+          errlog('SCRAPE TEST FILE NOT FOUND:', specPath);
+          return resolve({ success: false, error: `Test file not found: ${specPath}` });
+        }
+
+        const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+        const cmd = `npx playwright test "${relSpec}" --headed --project=chromium --workers=1`;
+
+        const env = Object.assign({}, process.env);
+        env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+        
+        // Pass output path to the scraper
+        env.OUTPUT_PATH = outputPath;
+
+        log('=== LAUNCHING GATEWAY SCRAPER ===');
+        log('Command:', cmd);
+
+        const child = spawn(cmd, { shell: true, stdio: 'inherit', env, cwd: process.cwd() });
+
+        child.on('exit', (code) => {
+          log('=== GATEWAY SCRAPER COMPLETED ===');
+          log('Exit code:', code);
+          resolve({ success: code === 0, code: code });
+        });
+
+        child.on('error', (e) => {
+          errlog('=== SCRAPER SPAWN ERROR ===');
+          errlog('Failed to start scraper:', e.message);
           resolve({ success: false, error: e.message });
         });
       });
@@ -491,6 +533,17 @@ if (fs.existsSync(myBrowsersPath)) {
               <div class="muted">Run port reload script</div>
             </div>
           </div>
+
+          <div class="option" id="opt-scrape" data-process="Scrape">
+            <span class="swatch" style="background: #17a2b8;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </span>
+            <div>
+              <div class="label">Gateway Scraper</div>
+              <div class="muted">Inventory all gateways</div>
+            </div>
+          </div>
+
           <div class="option disabled" id="opt-unassigned-1">
             <span class="swatch unassigned">?</span>
             <div>
@@ -698,17 +751,19 @@ if (fs.existsSync(myBrowsersPath)) {
     // --- ADDED: Step 1 Next Button Logic ---
     const toNextStepBtn = q('#to-next-step');
     function updateStep1Next() {
-      if (!state.process) {
-        toNextStepBtn.disabled = true;
-        return;
+        if (!state.process) {
+          toNextStepBtn.disabled = true;
+          return;
+        }
+        toNextStepBtn.disabled = false;
+        if (state.process === 'Reload') {
+          toNextStepBtn.textContent = 'Configure →';
+        } else if (state.process === 'Scrape') {
+          toNextStepBtn.textContent = 'Run Scrape →';
+        } else {
+          toNextStepBtn.textContent = 'Next →';
+        }
       }
-      toNextStepBtn.disabled = false;
-      if (state.process === 'Reload') {
-        toNextStepBtn.textContent = 'Configure →';
-      } else {
-        toNextStepBtn.textContent = 'Next →';
-      }
-    }
 
     // === STEP 1: Process Selection ===
     q('#opt-activation').addEventListener('click', ()=>{ 
@@ -726,6 +781,11 @@ if (fs.existsSync(myBrowsersPath)) {
       state.process='Reload';
       updateStep1Next();
     });
+    q('#opt-scrape').addEventListener('click', ()=>{ 
+      clearSelected('.option'); q('#opt-scrape').classList.add('selected'); 
+      state.process='Scrape';
+      updateStep1Next();
+    });
 
     q('#proc-reset').addEventListener('click', ()=>{ 
       state.process=null; 
@@ -738,13 +798,21 @@ if (fs.existsSync(myBrowsersPath)) {
     });
     
     q('#to-next-step').addEventListener('click', () => {
-      if (!state.process) return;
-      if (state.process === 'Reload') {
-        showStep('#step-reload');
-      } else {
-        showStep('#step-provider');
-      }
-    });
+        if (!state.process) return;
+        if (state.process === 'Reload') {
+          showStep('#step-reload');
+        } else if (state.process === 'Scrape') {
+          // Run scrape immediately and close UI
+          if (typeof window.onSelection === 'function') {
+            const payload = { process: 'Scrape' };
+            window.onSelection(payload);
+          } else {
+            alert('ERROR: Launcher bridge not available!');
+          }
+        } else {
+          showStep('#step-provider');
+        }
+      });
 
     // === STEP 2: Provider Selection ===
     q('.provider', true).forEach(el=>{
@@ -1120,11 +1188,55 @@ if (fs.existsSync(myBrowsersPath)) {
   // This part only runs for 'Activation' or 'Refill'
   // 'Reload' is handled by the 'runReloadPorts' function
 
-  if (selection.process === 'Reload') {
+if (selection.process === 'Reload') {
     log('Reload process was handled by the UI. Launcher is exiting.');
     process.exit(0);
   }
 
+  if (selection.process === 'Scrape') {
+    log('=== STARTING GATEWAY SCRAPING ===');
+    
+    const specPath = path.join(process.cwd(), 'tests', 'scrape', 'gateway-scraper.spec.ts');
+    
+    if (!fs.existsSync(specPath)) {
+      errlog('SCRAPE TEST FILE NOT FOUND:', specPath);
+      errlog('Expected location:', specPath);
+      process.exit(1);
+    }
+    
+    const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+    const cmd = `npx playwright test "${relSpec}" --headed --project=chromium --workers=1`;
+    
+    const env = Object.assign({}, process.env);
+    env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+    env.OUTPUT_PATH = outputPath;
+    
+    log('Command:', cmd);
+    log('Output path:', outputPath);
+    
+    const child = spawn(cmd, {
+      shell: true,
+      stdio: 'inherit',
+      env,
+      cwd: process.cwd()
+    });
+    
+    child.on('exit', (code) => {
+      log('=== GATEWAY SCRAPER COMPLETED ===');
+      log('Exit code:', code);
+      process.exit(code === null ? 0 : code);
+    });
+    
+    child.on('error', (e) => {
+      errlog('=== SCRAPER SPAWN ERROR ===');
+      errlog('Failed to start scraper:', e.message);
+      process.exit(1);
+    });
+    
+    // Exit early - don't continue to test execution
+    return;
+  }
+    
   log('=== CONFIGURING TEST EXECUTION ===');
 
   const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
