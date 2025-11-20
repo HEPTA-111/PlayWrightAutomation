@@ -58,3 +58,5 @@ Environment variables
 # Playwright
 /playwright-report/
 /blob-report/
+
+Inventory Reports

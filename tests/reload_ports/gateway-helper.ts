@@ -157,9 +157,8 @@ export async function reloadGatewayPorts(page: Page, gatewayId: GatewayConfig.Ga
   await listFootCheckbox.uncheck();
   await savePortHardware(rightFrame, page);
 
-  // 8. Toggle basic enable
+ // 8. Toggle basic enable
   await enableCell.click();
-  await rightFrame.getByRole('cell', { name: 'Enable', exact: true }).check(); // (from example)
   await enableCheckbox.check();
   await saveBasicSettings(rightFrame, page);
 

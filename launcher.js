@@ -131,7 +131,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       }
     });
 
-    // --- UPDATED: Run Reload Ports function ---
+    // --- UPDATED: Run Power Cycle function ---
     await page.exposeFunction('runReloadPorts', (gateway, ports) => {
       return new Promise((resolve) => {
 
@@ -197,7 +197,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
 
         const env = Object.assign({}, process.env);
         env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
-        
+
         // Pass output path to the scraper
         env.OUTPUT_PATH = outputPath;
 
@@ -529,8 +529,8 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             </span>
             <div>
-              <div class="label">Reload Ports</div>
-              <div class="muted">Run port reload script</div>
+              <div class="label">Power Cycle</div>
+              <div class="muted">Run power Cycle</div>
             </div>
           </div>
 
@@ -668,7 +668,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       
       <!-- === STEP 4: RELOAD PORTS === -->
       <div id="step-reload" class="step hidden">
-        <div class="step-header">Reload Ports</div>
+        <div class="step-header">Power Cycle</div>
         
         <div class="form-group">
           <div class="form-label">Choose Gateway (101–110)</div>
@@ -797,22 +797,22 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       window.location.reload();
     });
     
-    q('#to-next-step').addEventListener('click', () => {
-        if (!state.process) return;
-        if (state.process === 'Reload') {
-          showStep('#step-reload');
-        } else if (state.process === 'Scrape') {
-          // Run scrape immediately and close UI
-          if (typeof window.onSelection === 'function') {
-            const payload = { process: 'Scrape' };
-            window.onSelection(payload);
-          } else {
-            alert('ERROR: Launcher bridge not available!');
-          }
+   q('#to-next-step').addEventListener('click', () => {
+      if (!state.process) return;
+      if (state.process === 'Reload') {
+        showStep('#step-reload');
+      } else if (state.process === 'Scrape') {
+        // Run scrape immediately and close UI
+        if (typeof window.onSelection === 'function') {
+          const payload = { process: 'Scrape' };
+          window.onSelection(payload);
         } else {
-          showStep('#step-provider');
+          alert('ERROR: Launcher bridge not available!');
         }
-      });
+      } else {
+        showStep('#step-provider');
+      }
+    });
 
     // === STEP 2: Provider Selection ===
     q('.provider', true).forEach(el=>{
@@ -898,7 +898,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       showStep('#step-confirm');
     });
 
-    // === STEP 4: Reload Ports ===
+    // === STEP 4: Power Cycle ===
     q('#reload-gateway-box').querySelectorAll('.gateway').forEach(g=>{
       g.addEventListener('click', () => {
         clearSelected('#reload-gateway-box .gateway'); 
@@ -1188,106 +1188,568 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
   // This part only runs for 'Activation' or 'Refill'
   // 'Reload' is handled by the 'runReloadPorts' function
 
-if (selection.process === 'Reload') {
+  if (selection.process === 'Reload') {
     log('Reload process was handled by the UI. Launcher is exiting.');
     process.exit(0);
   }
 
   if (selection.process === 'Scrape') {
     log('=== STARTING GATEWAY SCRAPING ===');
-    
+
     const specPath = path.join(process.cwd(), 'tests', 'scrape', 'gateway-scraper.spec.ts');
-    
+
     if (!fs.existsSync(specPath)) {
       errlog('SCRAPE TEST FILE NOT FOUND:', specPath);
       errlog('Expected location:', specPath);
       process.exit(1);
     }
-    
+
     const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
     const cmd = `npx playwright test "${relSpec}" --headed --project=chromium --workers=1`;
-    
+
     const env = Object.assign({}, process.env);
     env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
     env.OUTPUT_PATH = outputPath;
-    
+
     log('Command:', cmd);
     log('Output path:', outputPath);
-    
+
     const child = spawn(cmd, {
       shell: true,
       stdio: 'inherit',
       env,
       cwd: process.cwd()
     });
-    
-    child.on('exit', (code) => {
+
+
+    child.on('exit', async (code) => {
       log('=== GATEWAY SCRAPER COMPLETED ===');
       log('Exit code:', code);
-      process.exit(code === null ? 0 : code);
+      
+      if (code === 0) {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Create "Inventory Reports" folder
+        const reportsFolder = path.join(outputPath, 'Inventory Reports');
+        if (!fs.existsSync(reportsFolder)) {
+          fs.mkdirSync(reportsFolder, { recursive: true });
+          log('Created "Inventory Reports" folder');
+        }
+        
+        // Source files (in project root)
+        const sourceFiles = {
+          pdf: path.join(outputPath, `GW_Inventory_${today}.pdf`),
+          txt: path.join(outputPath, `GW_Inventory_${today}.txt`),
+          json: path.join(outputPath, `GW_Inventory_${today}.json`),
+          errors: path.join(outputPath, `GW_Inventory_Errors_${today}.log`)
+        };
+        
+        // Destination files (in Inventory Reports folder)
+        const destFiles = {
+          pdf: path.join(reportsFolder, `GW_Inventory_${today}.pdf`),
+          txt: path.join(reportsFolder, `GW_Inventory_${today}.txt`),
+          json: path.join(reportsFolder, `GW_Inventory_${today}.json`),
+          errors: path.join(reportsFolder, `GW_Inventory_Errors_${today}.log`)
+        };
+        
+        // Copy files to Inventory Reports folder
+        let copiedFiles = [];
+        for (const [type, sourcePath] of Object.entries(sourceFiles)) {
+          if (fs.existsSync(sourcePath)) {
+            fs.copyFileSync(sourcePath, destFiles[type]);
+            copiedFiles.push({
+              name: path.basename(destFiles[type]),
+              type: type,
+              size: fs.statSync(destFiles[type]).size
+            });
+            log(`Copied: ${path.basename(destFiles[type])}`);
+          }
+        }
+        
+        // Read summary statistics from JSON
+        let stats = { total: 0, active: 0, weakSignal: 0, inactive: 0, errors: 0 };
+        const jsonPath = destFiles.json;
+        if (fs.existsSync(jsonPath)) {
+          try {
+            const jsonData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+            if (jsonData.data) {
+              stats.total = jsonData.data.length;
+              stats.active = jsonData.data.filter(p => p.status === 'active').length;
+              stats.weakSignal = jsonData.data.filter(p => p.status === 'weak-signal').length;
+              stats.inactive = jsonData.data.filter(p => p.status === 'inactive').length;
+            }
+            if (jsonData.errors) {
+              stats.errors = jsonData.errors.length;
+            }
+          } catch (e) {
+            log('Could not read statistics from JSON');
+          }
+        }
+        
+        log('All reports saved to "Inventory Reports" folder');
+        
+        // Clean up - delete original files from root
+        log('🧹 Cleaning up temporary files...');
+        for (const [type, sourcePath] of Object.entries(sourceFiles)) {
+          if (fs.existsSync(sourcePath)) {
+            try {
+              fs.unlinkSync(sourcePath);
+              log(`   Deleted: ${path.basename(sourcePath)}`);
+            } catch (e) {
+              log(`   Could not delete: ${path.basename(sourcePath)}`);
+            }
+          }
+        }
+        log('Cleanup complete');
+        
+        // Show success page
+        const successBrowser = await chromium.launch({ headless: false });
+        const successPage = await successBrowser.newPage();
+        
+        // Format file size
+        function formatBytes(bytes) {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gateway Inventory - Reports Saved</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --accent: #0b63ff;
+      --accent-light: #eef2ff;
+      --border: #e5e7eb;
+      --success: #28a745;
+      --success-light: #d4edda;
+      --radius-lg: 12px;
+      --radius-md: 8px;
+      --shadow: 0 10px 30px rgba(20,25,40,0.08);
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      background: var(--bg);
+      color: #111827;
+      line-height: 1.5;
+      padding: 40px 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card);
+      padding: 40px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      animation: slideUp 0.4s ease-out;
+    }
+    
+    @keyframes slideUp {
+      from { 
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to { 
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .success-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .success-icon {
+      font-size: 64px;
+      margin-bottom: 15px;
+      animation: scaleIn 0.5s ease-out;
+    }
+    
+    @keyframes scaleIn {
+      from { transform: scale(0); }
+      to { transform: scale(1); }
+    }
+    
+    h1 { 
+      color: var(--success);
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 25px 0;
+    }
+    
+    .stat-card {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: var(--radius-md);
+      text-align: center;
+      border: 2px solid var(--border);
+    }
+    
+    .stat-number {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--accent);
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .location-box {
+      background: var(--accent-light);
+      padding: 20px;
+      border-radius: var(--radius-md);
+      border-left: 4px solid var(--accent);
+      margin: 25px 0;
+    }
+    
+    .location-label {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .location-path {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      background: var(--card);
+      padding: 12px;
+      border-radius: 6px;
+      word-break: break-all;
+      color: #333;
+      cursor: text;
+      user-select: all;
+    }
+    
+    .files-section {
+      margin: 25px 0;
+    }
+    
+    .section-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .file-item {
+      padding: 14px;
+      margin: 10px 0;
+      background: var(--bg);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.2s ease;
+    }
+    
+    .file-item:hover {
+      border-color: var(--accent);
+      transform: translateX(4px);
+    }
+    
+    .file-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+    
+    .file-info {
+      flex: 1;
+    }
+    
+    .file-name {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+      color: #495057;
+      font-weight: 500;
+    }
+    
+    .file-size {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    
+    .actions {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 1px solid var(--border);
+    }
+    
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      margin: 0 6px;
+    }
+    
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #0052d9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(11, 99, 255, 0.3);
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+    
+    .success-note {
+      margin-top: 25px;
+      padding: 16px;
+      background: var(--success-light);
+      border-radius: var(--radius-md);
+      border-left: 4px solid var(--success);
+      color: #155724;
+      font-size: 14px;
+    }
+    
+    .timestamp {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="success-header">
+      <div class="success-icon">✅</div>
+      <h1>Reports Saved Successfully!</h1>
+      <p class="subtitle">Gateway inventory has been scraped and saved</p>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number">${stats.total}</div>
+        <div class="stat-label">Total Ports</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #28a745;">${stats.active}</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #ffc107;">${stats.weakSignal}</div>
+        <div class="stat-label">Weak Signal</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #dc3545;">${stats.inactive}</div>
+        <div class="stat-label">Inactive</div>
+      </div>
+      ${stats.errors > 0 ? `<div class="stat-card">
+        <div class="stat-number" style="color: #fd7e14;">${stats.errors}</div>
+        <div class="stat-label">Errors</div>
+      </div>` : ''}
+    </div>
+    
+    <div class="location-box">
+      <div class="location-label">📂 Saved To</div>
+      <div class="location-path">${reportsFolder}</div>
+    </div>
+    
+    <div class="files-section">
+      <div class="section-title">📄 Files Saved</div>
+      ${copiedFiles.map(file => {
+        let icon = '📄';
+        if (file.type === 'pdf') icon = '📕';
+        else if (file.type === 'txt') icon = '📝';
+        else if (file.type === 'json') icon = '📊';
+        else if (file.type === 'errors') icon = '⚠️';
+        
+        return `<div class="file-item">
+          <span class="file-icon">${icon}</span>
+          <div class="file-info">
+            <div class="file-name">${file.name}</div>
+            <div class="file-size">${formatBytes(file.size)}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    
+    <div class="success-note">
+      <strong>✓ Complete!</strong> All inventory reports have been saved to the "Inventory Reports" folder. 
+      Original files have been cleaned up from the project root.
+    </div>
+    
+    <div class="actions">
+      <button class="btn btn-primary" onclick="copyPath()">📋 Copy Path</button>
+      <button class="btn btn-secondary" onclick="closeAndExit()">Close & Exit</button>
+    </div>
+    
+    <div class="timestamp">
+      Generated on ${new Date().toLocaleString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}
+    </div>
+  </div>
+  
+  <script>
+    function copyPath() {
+      const path = \`${reportsFolder.replace(/\\/g, '\\\\')}\`;
+      navigator.clipboard.writeText(path).then(() => {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.background = '#28a745';
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = '';
+        }, 2000);
+      }).catch(() => {
+        alert('Path: ' + path);
+      });
+    }
+    
+    function closeAndExit() {
+      window.close();
+    }
+  </script>
+</body>
+</html>
+        `;
+        
+        await successPage.setContent(html);
+        
+        log('Success page displayed.');
+        
+        // Exit when browser closes
+        successBrowser.on('disconnected', () => {
+          log('Browser closed. Exiting application...');
+          process.exit(0);
+        });
+        
+        // Also handle page close
+        successPage.on('close', () => {
+          log('Page closed. Exiting application...');
+          successBrowser.close().then(() => process.exit(0));
+        });
+        
+      } else {
+        process.exit(code === null ? 0 : code);
+      }
     });
-    
-    child.on('error', (e) => {
-      errlog('=== SCRAPER SPAWN ERROR ===');
-      errlog('Failed to start scraper:', e.message);
-      process.exit(1);
-    });
-    
-    // Exit early - don't continue to test execution
-    return;
-  }
-    
-  log('=== CONFIGURING TEST EXECUTION ===');
 
-  const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
-  const gateway = String(selection.gateway || '');
-  const testIndex = gatewayToTestMap[gateway];
 
-  if (typeof testIndex === 'undefined') {
-    errlog(`No test mapping for gateway ${gateway}`);
-    errlog('Valid gateways:', Object.keys(gatewayToTestMap).join(', '));
-    process.exit(1);
+child.on('error', (e) => {
+  errlog('=== SCRAPER SPAWN ERROR ===');
+  errlog('Failed to start scraper:', e.message);
+  process.exit(1);
+});
+
+// Exit early - don't continue to test execution
+return;
   }
 
-  const link = String(selection.linkType || '').toLowerCase();
-  const isLocal = (selection.process === 'Activation') && (link === 'internal' || link === 'local');
-  const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
-  const specPath = path.join(process.cwd(), 'tests', 'mobilex', procFolder, specFileName);
+log('=== CONFIGURING TEST EXECUTION ===');
 
-  log('Process folder:', procFolder);
-  log('Gateway:', gateway, '→ Test index:', testIndex);
-  log('Spec file:', specFileName);
-  log('Full spec path:', specPath);
+const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
+const gateway = String(selection.gateway || '');
+const testIndex = gatewayToTestMap[gateway];
 
-  if (!fs.existsSync(specPath)) {
-    errlog('TEST FILE NOT FOUND:', specPath);
-    errlog('Tests folder contents:', listFolder(path.join(process.cwd(), 'tests'), 200));
-    errlog('MobileX folder contents:', listFolder(path.join(process.cwd(), 'tests', 'mobilex'), 200));
-    errlog(`${procFolder} folder contents:`, listFolder(path.join(process.cwd(), 'tests', 'mobilex', procFolder), 200));
-    process.exit(1);
-  }
+if (typeof testIndex === 'undefined') {
+  errlog(`No test mapping for gateway ${gateway}`);
+  errlog('Valid gateways:', Object.keys(gatewayToTestMap).join(', '));
+  process.exit(1);
+}
 
-  log('✓ Test file exists');
+const link = String(selection.linkType || '').toLowerCase();
+const isLocal = (selection.process === 'Activation') && (link === 'internal' || link === 'local');
+const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
+const specPath = path.join(process.cwd(), 'tests', 'mobilex', procFolder, specFileName);
 
-  const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+log('Process folder:', procFolder);
+log('Gateway:', gateway, '→ Test index:', testIndex);
+log('Spec file:', specFileName);
+log('Full spec path:', specPath);
 
-  // ========== PLAYWRIGHT CONFIG SETUP ==========
-  log('=== PLAYWRIGHT CONFIG SETUP ===');
+if (!fs.existsSync(specPath)) {
+  errlog('TEST FILE NOT FOUND:', specPath);
+  errlog('Tests folder contents:', listFolder(path.join(process.cwd(), 'tests'), 200));
+  errlog('MobileX folder contents:', listFolder(path.join(process.cwd(), 'tests', 'mobilex'), 200));
+  errlog(`${procFolder} folder contents:`, listFolder(path.join(process.cwd(), 'tests', 'mobilex', procFolder), 200));
+  process.exit(1);
+}
 
-  let configArg = '';
-  const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
-  const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+log('✓ Test file exists');
 
-  if (fs.existsSync(cfgTs)) {
-    configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
-    log('✓ Using playwright.config.ts');
-  } else if (fs.existsSync(cfgJs)) {
-    configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
-    log('✓ Using playwright.config.js');
-  } else {
-    errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
+const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
 
-    const emergencyConfig = `// Emergency config created by launcher
+// ========== PLAYWRIGHT CONFIG SETUP ==========
+log('=== PLAYWRIGHT CONFIG SETUP ===');
+
+let configArg = '';
+const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
+const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+
+if (fs.existsSync(cfgTs)) {
+  configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
+  log('✓ Using playwright.config.ts');
+} else if (fs.existsSync(cfgJs)) {
+  configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
+  log('✓ Using playwright.config.js');
+} else {
+  errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
+
+  const emergencyConfig = `// Emergency config created by launcher
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
@@ -1310,70 +1772,70 @@ module.exports = defineConfig({
 });
 `;
 
-    const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
-    try {
-      fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
-      log('✓ Emergency config created:', emergencyPath);
-      configArg = ` --config="${emergencyPath.split(path.sep).join('/')}"`;
-    } catch (e) {
-      errlog('✗ FAILED to create emergency config:', e.message);
-      errlog('Cannot proceed without config file');
-      process.exit(1);
-    }
-  }
-
-  // ========== BROWSER PATH SETUP ==========
-  // This is already set for the parent process.
-  // We just need to ensure the child process (spawn) also gets it.
-  const env = Object.assign({}, process.env);
-
-  if (fs.existsSync(myBrowsersPath)) {
-    env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
-    log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
-  } else {
-    log('⚠ Child process: my-browsers folder not found - will use system Playwright browsers');
-  }
-  // --- END BROWSER PATH SETUP ---
-
-  // --- SET ALL ENV VARS ---
-  env.START_PORT = String(selection.startPortIndex || '1');
-  log('✓ START_PORT set to:', env.START_PORT);
-
-  // --- ADDED: Set Email strategy environment variables ---
-  env.EMAIL_STRATEGY = String(selection.emailStrategy || 'single');
-  env.EMAIL_SINGLE = String(selection.emailSingle || 'rb@usa.com');
-  env.EMAIL_N = String(selection.emailN || '1');
-  log('✓ EMAIL_STRATEGY set to:', env.EMAIL_STRATEGY);
-  log('✓ EMAIL_SINGLE set to:', env.EMAIL_SINGLE);
-  log('✓ EMAIL_N set to:', env.EMAIL_N);
-  // --- END ADDED ---
-
-  // ========== FINAL COMMAND ==========
-  const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
-
-  log('=== LAUNCHING PLAYWRIGHT ===');
-  log('Command:', cmd);
-  log('Working dir:', process.cwd());
-  log('============================');
-
-  const child = spawn(cmd, {
-    shell: true,
-    stdio: 'inherit',
-    env,
-    cwd: process.cwd()
-  });
-
-  child.on('exit', (code) => {
-    log('=== TEST EXECUTION COMPLETED ===');
-    log('Exit code:', code);
-    process.exit(code === null ? 0 : code);
-  });
-
-  child.on('error', (e) => {
-    errlog('=== SPAWN ERROR ===');
-    errlog('Failed to start Playwright:', e.message);
-    errlog('Stack:', e.stack);
+  const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
+  try {
+    fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
+    log('✓ Emergency config created:', emergencyPath);
+    configArg = ` --config="${emergencyPath.split(path.sep).join('/')}"`;
+  } catch (e) {
+    errlog('✗ FAILED to create emergency config:', e.message);
+    errlog('Cannot proceed without config file');
     process.exit(1);
-  });
+  }
+}
 
-})();
+// ========== BROWSER PATH SETUP ==========
+// This is already set for the parent process.
+// We just need to ensure the child process (spawn) also gets it.
+const env = Object.assign({}, process.env);
+
+if (fs.existsSync(myBrowsersPath)) {
+  env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+  log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
+} else {
+  log('⚠ Child process: my-browsers folder not found - will use system Playwright browsers');
+}
+// --- END BROWSER PATH SETUP ---
+
+// --- SET ALL ENV VARS ---
+env.START_PORT = String(selection.startPortIndex || '1');
+log('✓ START_PORT set to:', env.START_PORT);
+
+// --- ADDED: Set Email strategy environment variables ---
+env.EMAIL_STRATEGY = String(selection.emailStrategy || 'single');
+env.EMAIL_SINGLE = String(selection.emailSingle || 'rb@usa.com');
+env.EMAIL_N = String(selection.emailN || '1');
+log('✓ EMAIL_STRATEGY set to:', env.EMAIL_STRATEGY);
+log('✓ EMAIL_SINGLE set to:', env.EMAIL_SINGLE);
+log('✓ EMAIL_N set to:', env.EMAIL_N);
+// --- END ADDED ---
+
+// ========== FINAL COMMAND ==========
+const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
+
+log('=== LAUNCHING PLAYWRIGHT ===');
+log('Command:', cmd);
+log('Working dir:', process.cwd());
+log('============================');
+
+const child = spawn(cmd, {
+  shell: true,
+  stdio: 'inherit',
+  env,
+  cwd: process.cwd()
+});
+
+child.on('exit', (code) => {
+  log('=== TEST EXECUTION COMPLETED ===');
+  log('Exit code:', code);
+  process.exit(code === null ? 0 : code);
+});
+
+child.on('error', (e) => {
+  errlog('=== SPAWN ERROR ===');
+  errlog('Failed to start Playwright:', e.message);
+  errlog('Stack:', e.stack);
+  process.exit(1);
+});
+
+}) ();

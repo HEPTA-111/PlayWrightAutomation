@@ -185,27 +185,76 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
       mdn = mdn.substring(1);
     }
     
-    const portData: PortData = {
+const portData: PortData = {
       port: `${gatewayId}-${portKey}`,
       mdn: mdn,
       iccid: iccidData[portKey],
       imei: imeiData[portKey],
-      status: 'inactive' // Default status
+      status: 'inactive' // Default status, will be updated below
     };
     
-    // Determine status based on data presence
-    if (portData.mdn && portData.iccid && portData.imei) {
-      portData.status = 'active';
-    } else if (portData.imei && portData.iccid && !portData.mdn) {
-      portData.status = 'weak-signal';
-    } else {
-      portData.status = 'inactive';
-    }
-    
+    // We'll determine actual status after scraping all data
     portDataArray.push(portData);
   }
   
-  console.log(`Gateway ${gatewayId} scrape complete. Found data for ${portDataArray.filter(p => p.imei).length}/64 ports`);
+  // Now scrape the actual port status from the gateway UI
+  console.log('Scraping port status indicators...');
+  await leftFrame.getByRole('link', { name: 'Port Status' }).click();
+  await page.waitForTimeout(2000);
+  
+  // Wait for status table to load
+  await rightFrame.locator('table').first().waitFor({ state: 'visible', timeout: 10000 });
+  
+  // Scrape status for each port
+  const statusRows = rightFrame.locator('tr:has(td)');
+  const statusRowCount = await statusRows.count();
+  
+  for (let i = 0; i < statusRowCount; i++) {
+    const row = statusRows.nth(i);
+    const rowText = await row.textContent().catch(() => '');
+    
+    if (!rowText) continue;
+    
+    // Extract port number (e.g., "1A", "2A", etc.)
+    const portMatch = rowText.match(/(\d{1,2})A/);
+    if (!portMatch) continue;
+    
+    const portNum = parseInt(portMatch[1], 10);
+    const portKey = `A${portNum}`;
+    
+    // Find the corresponding port in our data array
+    const portDataIndex = portDataArray.findIndex(p => p.port === `${gatewayId}-${portKey}`);
+    if (portDataIndex === -1) continue;
+    
+    // Check for status indicator images or classes
+    try {
+      // Look for status indicators - the gateway typically uses images or colored elements
+      const statusCell = row.locator('td').first();
+      const statusHtml = await statusCell.innerHTML().catch(() => '');
+      
+      // Detect status based on image src or background color
+      // Red dot (offline.png or red background) = inactive
+      // Green dot (online.png or green background) = active  
+      // Green circle with white center (weaksignal.png or specific class) = weak-signal
+      
+      if (statusHtml.includes('offline') || statusHtml.includes('red') || statusHtml.includes('#ff0000') || statusHtml.includes('rgb(255, 0, 0)')) {
+        portDataArray[portDataIndex].status = 'inactive';
+      } else if (statusHtml.includes('weaksignal') || statusHtml.includes('weak') || statusHtml.includes('yellow') || statusHtml.includes('circle')) {
+        portDataArray[portDataIndex].status = 'weak-signal';
+      } else if (statusHtml.includes('online') || statusHtml.includes('green') || statusHtml.includes('#00ff00') || statusHtml.includes('rgb(0, 255, 0)') || statusHtml.includes('rgb(0, 128, 0)')) {
+        portDataArray[portDataIndex].status = 'active';
+      }
+      
+      console.log(`${portKey}: ${portDataArray[portDataIndex].status}`);
+      } catch (e) {
+      console.warn(`Could not determine status for ${portKey}`);
+    }
+  
+  }
+  
+console.log(`Gateway ${gatewayId} scrape complete. Found data for ${portDataArray.filter(p => p.imei).length}/64 ports`);
+  console.log(`Status breakdown - Active: ${portDataArray.filter(p => p.status === 'active').length}, Weak Signal: ${portDataArray.filter(p => p.status === 'weak-signal').length}, Inactive: ${portDataArray.filter(p => p.status === 'inactive').length}`);
+  
   return portDataArray;
 }
 
