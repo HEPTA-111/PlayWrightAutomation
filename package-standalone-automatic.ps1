@@ -8,7 +8,7 @@
 
 param(
   [string]$SevenZipExe = "C:\Program Files\7-Zip\7z.exe",
-  [string]$OutName = "final-single-standalone.exe",
+  [string]$OutName = "Atom8-v4.exe",
   [switch]$ForceDownloadNode
 )
 
@@ -82,7 +82,7 @@ if (-not $allPresent) {
 Write-Host ""
 
 # Playwright config check
-Write-Host "=== PLAYWRIGHT CONFIG CHECK ===" -ForegroundColor Yellow
+Write-Host "=== CONFIG CHECK ===" -ForegroundColor Yellow
 
 $cfgTsSrc = Join-Path $root "playwright.config.ts"
 $cfgJsSrc = Join-Path $root "playwright.config.js"
@@ -130,7 +130,7 @@ export default defineConfig({
 Write-Host ""
 
 # Browsers check
-Write-Host "=== PLAYWRIGHT BROWSERS CHECK ===" -ForegroundColor Yellow
+Write-Host "=== BROWSERS CHECK ===" -ForegroundColor Yellow
 
 $myBrowsersPath = Join-Path $root "my-browsers"
 if (-not (Test-Path $myBrowsersPath)) {
