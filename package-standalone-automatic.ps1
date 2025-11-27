@@ -8,7 +8,7 @@
 
 param(
   [string]$SevenZipExe = "C:\Program Files\7-Zip\7z.exe",
-  [string]$OutName = "Atom8-v4.exe",
+  [string]$OutName = "Atom8-v5.exe",
   [switch]$ForceDownloadNode
 )
 
@@ -173,6 +173,7 @@ if ((-not (Test-Path $portableNodePath)) -or $ForceDownloadNode) {
   }
 
   if (-not $nodeVersionRaw) {
+    
     $nodeVersion = "22.13.0"
     Write-Host "  Using default Node version: v$nodeVersion" -ForegroundColor Gray
   }

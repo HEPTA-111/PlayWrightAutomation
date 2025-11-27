@@ -289,7 +289,7 @@ test('test with 3 tabs', async ({ context }) => {
   await page3.locator('#Password').press('CapsLock');
   await page3.locator('#Password').fill('G');
   await page3.locator('#Password').press('CapsLock');
-  await page3.locator('#Password').fill('Gateway');
+  await page3.locator('#Password').fill('gateway1!!');
   await page3.getByRole('button', { name: 'Login' }).click();
 
   console.log('Page 3: Waiting for login to complete...');

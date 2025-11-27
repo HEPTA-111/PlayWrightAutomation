@@ -665,6 +665,83 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           </div>
         </div>
       </div>
+
+            <!-- === STEP 3b: T-MOBILE OPTIONS === -->
+      <div id="step-tmobile" class="step hidden">
+        <div class="step-header">Step 3 – T-Mobile Options</div>
+        
+        <div class="form-group">
+          <div class="form-label">Choose Gateway (101–110)</div>
+          <div class="gateway-box" id="tmobile-gateway-box">${makeGatewayHtml()}</div>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Starting Port (A1–A64)</div>
+          <input id="tmobile-start-port" type="number" min="1" max="64" value="1" />
+        </div>
+
+        <div class="form-group" id="tmobile-link-type-section">
+          <div class="form-label">Link Type</div>
+          <div class="grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="option tmobile-linktype" data-link="external"><div class="label">External</div></div>
+            <div class="option tmobile-linktype" data-link="internal"><div class="label">Internal</div></div>
+          </div>
+        </div>
+
+        <!-- Reuse the same email section -->
+        <div class="form-group" id="tmobile-email-section">
+          <div class="form-label">Email Management</div>
+          <div class="email-manager">
+            <div class="email-list" id="email-list-container"></div>
+            <div class="email-status" id="email-status-display">Loaded 0 emails.</div>
+            <div class="email-add">
+              <input type="text" id="email-add-input" placeholder="add.new@example.com" />
+              <button class="btn primary" id="email-add-btn">Add</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-group" id="tmobile-email-strategy-section">
+          <div class="form-label">Email Usage Strategy</div>
+          <div class="grid" style="grid-template-columns: 1fr; gap: 10px;">
+            <div class="option" id="tmobile-strat-single">
+              <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+                <input type="radio" name="tmobile-email-strategy" value="single" style="margin-right:12px;" checked>
+                <div>
+                  <div class="label">Use a Single Email</div>
+                  <input id="tmobile-email-single-input" type="text" value="rb@usa.com" style="width:250px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+                </div>
+              </label>
+            </div>
+            <div class="option" id="tmobile-strat-loop">
+              <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+                <input type="radio" name="tmobile-email-strategy" value="loop" style="margin-right:12px;">
+                <div>
+                  <div class="label">Loop All Saved Emails</div>
+                  <div class="muted" style="margin-top: 4px;">Uses email 1, 2, ... N, then repeats.</div>
+                </div>
+              </label>
+            </div>
+            <div class="option" id="tmobile-strat-n-times">
+              <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+                <input type="radio" name="tmobile-email-strategy" value="n-times" style="margin-right:12px;">
+                <div>
+                  <div class="label">Loop First 'N' Saved Emails</div>
+                  <input id="tmobile-email-n-input" type="number" value="1" min="1" max="100" style="width:80px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <div class="controls">
+          <div class="muted">Review and finish</div>
+          <div>
+            <button class="btn ghost" id="tmobile-back">← Back</button>
+            <button class="btn primary" id="tmobile-finish">Finish</button>
+          </div>
+        </div>
+      </div>
       
       <!-- === STEP 4: RELOAD PORTS === -->
       <div id="step-reload" class="step hidden">
@@ -822,13 +899,10 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
         state.provider = el.dataset.provider;
       });
     });
-    q('#prov-back').addEventListener('click', ()=> { showStep('#step-process'); });
-
     q('#to-next').addEventListener('click', ()=> {
       if (!state.provider) { alert('Please choose a provider'); return; }
       
       if (state.provider === 'MobileX') {
-        // Show/hide sections based on Activation/Refill
         const linkSection = q('#link-type-section');
         const emailSection = q('#email-section');
         const emailStrategySection = q('#email-strategy-section');
@@ -840,12 +914,29 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           state.linkType = null;
           clearSelected('.linktype');
         } else {
-          // Activation
           if (linkSection) linkSection.style.display = 'block';
           if (emailSection) emailSection.style.display = 'block';
           if (emailStrategySection) emailStrategySection.style.display = 'block';
         }
         showStep('#step-mobilex');
+      } else if (state.provider === 't-mobile') {
+        // Same logic for T-Mobile
+        const linkSection = q('#tmobile-link-type-section');
+        const emailSection = q('#tmobile-email-section');
+        const emailStrategySection = q('#tmobile-email-strategy-section');
+        
+        if (state.process === 'Refill') {
+          if (linkSection) linkSection.style.display = 'none';
+          if (emailSection) emailSection.style.display = 'none';
+          if (emailStrategySection) emailStrategySection.style.display = 'none';
+          state.linkType = null;
+          clearSelected('.tmobile-linktype');
+        } else {
+          if (linkSection) linkSection.style.display = 'block';
+          if (emailSection) emailSection.style.display = 'block';
+          if (emailStrategySection) emailStrategySection.style.display = 'block';
+        }
+        showStep('#step-tmobile');
       } else {
         updateSummary();
         showStep('#step-confirm');
@@ -897,6 +988,68 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       updateSummary();
       showStep('#step-confirm');
     });
+
+
+          // === STEP 3b: T-Mobile Options ===
+      q('#tmobile-gateway-box').querySelectorAll('.gateway').forEach(g=>{
+        g.addEventListener('click', () => {
+          clearSelected('#tmobile-gateway-box .gateway'); 
+          g.classList.add('selected'); 
+          state.gateway = g.dataset.gateway;
+        });
+      });
+
+      q('.tmobile-linktype', true).forEach(l=>{
+        l.addEventListener('click', () => {
+          clearSelected('.tmobile-linktype'); 
+          l.classList.add('selected'); 
+          state.linkType = l.dataset.link;
+        });
+      });
+
+      const tmobileStartPortInput = q('#tmobile-start-port');
+      tmobileStartPortInput.addEventListener('input', () => {
+        let v = parseInt(tmobileStartPortInput.value || '1', 10);
+        if (isNaN(v)) v = 1;
+        if (v < 1) v = 1;
+        if (v > 64) v = 64;
+        tmobileStartPortInput.value = String(v);
+        state.startPortIndex = v;
+      });
+
+      q('#tmobile-back').addEventListener('click', ()=> { showStep('#step-provider'); });
+
+      q('#tmobile-finish').addEventListener('click', ()=> {
+        if (!state.gateway) { alert('Please choose a gateway'); return; }
+        if (state.process === 'Activation' && !state.linkType) { alert('Please choose a link type'); return; }
+        
+        state.startPortIndex = parseInt(tmobileStartPortInput.value || '1', 10) || 1;
+        
+        if (state.process === 'Activation') {
+          state.emailStrategy = q('input[name="tmobile-email-strategy"]:checked').value || 'single';
+          state.emailSingle = q('#tmobile-email-single-input').value || 'rb@usa.com';
+          state.emailN = parseInt(q('#tmobile-email-n-input').value, 10) || 1;
+        }
+        
+        updateSummary();
+        showStep('#step-confirm');
+      });
+
+      // Email strategy radio selection
+      q('#tmobile-strat-single').addEventListener('click', () => 
+        q('input[name="tmobile-email-strategy"][value="single"]').checked = true
+      );
+      q('#tmobile-strat-loop').addEventListener('click', () => 
+        q('input[name="tmobile-email-strategy"][value="loop"]').checked = true
+      );
+      q('#tmobile-strat-n-times').addEventListener('click', () => 
+        q('input[name="tmobile-email-strategy"][value="n-times"]').checked = true
+      );
+
+
+
+
+
 
     // === STEP 4: Power Cycle ===
     q('#reload-gateway-box').querySelectorAll('.gateway').forEach(g=>{
@@ -965,10 +1118,15 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       q('#summary').innerHTML = s.map(x => '<div style="margin-bottom:6px;">'+x+'</div>').join('');
     }
 
-    q('#confirm-back').addEventListener('click', ()=> {
-      if (state.provider === 'MobileX') showStep('#step-mobilex');
-      else showStep('#step-provider');
-    });
+      q('#confirm-back').addEventListener('click', ()=> {
+        if (state.provider === 'MobileX') {
+          showStep('#step-mobilex');
+        } else if (state.provider === 't-mobile') {
+          showStep('#step-tmobile');
+        } else {
+          showStep('#step-provider');
+        }
+      });
 
     q('#confirm-launch').addEventListener('click', ()=> {
       if (typeof window.onSelection === 'function') {
@@ -1225,17 +1383,17 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     child.on('exit', async (code) => {
       log('=== GATEWAY SCRAPER COMPLETED ===');
       log('Exit code:', code);
-      
+
       if (code === 0) {
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Create "Inventory Reports" folder
         const reportsFolder = path.join(outputPath, 'Inventory Reports');
         if (!fs.existsSync(reportsFolder)) {
           fs.mkdirSync(reportsFolder, { recursive: true });
           log('Created "Inventory Reports" folder');
         }
-        
+
         // Source files (in project root)
         const sourceFiles = {
           pdf: path.join(outputPath, `GW_Inventory_${today}.pdf`),
@@ -1243,7 +1401,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           json: path.join(outputPath, `GW_Inventory_${today}.json`),
           errors: path.join(outputPath, `GW_Inventory_Errors_${today}.log`)
         };
-        
+
         // Destination files (in Inventory Reports folder)
         const destFiles = {
           pdf: path.join(reportsFolder, `GW_Inventory_${today}.pdf`),
@@ -1251,7 +1409,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           json: path.join(reportsFolder, `GW_Inventory_${today}.json`),
           errors: path.join(reportsFolder, `GW_Inventory_Errors_${today}.log`)
         };
-        
+
         // Copy files to Inventory Reports folder
         let copiedFiles = [];
         for (const [type, sourcePath] of Object.entries(sourceFiles)) {
@@ -1265,7 +1423,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
             log(`Copied: ${path.basename(destFiles[type])}`);
           }
         }
-        
+
         // Read summary statistics from JSON
         let stats = { total: 0, active: 0, weakSignal: 0, inactive: 0, errors: 0 };
         const jsonPath = destFiles.json;
@@ -1285,9 +1443,9 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
             log('Could not read statistics from JSON');
           }
         }
-        
+
         log('All reports saved to "Inventory Reports" folder');
-        
+
         // Clean up - delete original files from root
         log('🧹 Cleaning up temporary files...');
         for (const [type, sourcePath] of Object.entries(sourceFiles)) {
@@ -1301,11 +1459,11 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           }
         }
         log('Cleanup complete');
-        
+
         // Show success page
         const successBrowser = await chromium.launch({ headless: false });
         const successPage = await successBrowser.newPage();
-        
+
         // Format file size
         function formatBytes(bytes) {
           if (bytes === 0) return '0 Bytes';
@@ -1314,7 +1472,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           const i = Math.floor(Math.log(bytes) / Math.log(k));
           return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
-        
+
         const html = `
 <!DOCTYPE html>
 <html>
@@ -1604,20 +1762,20 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     <div class="files-section">
       <div class="section-title">📄 Files Saved</div>
       ${copiedFiles.map(file => {
-        let icon = '📄';
-        if (file.type === 'pdf') icon = '📕';
-        else if (file.type === 'txt') icon = '📝';
-        else if (file.type === 'json') icon = '📊';
-        else if (file.type === 'errors') icon = '⚠️';
-        
-        return `<div class="file-item">
+          let icon = '📄';
+          if (file.type === 'pdf') icon = '📕';
+          else if (file.type === 'txt') icon = '📝';
+          else if (file.type === 'json') icon = '📊';
+          else if (file.type === 'errors') icon = '⚠️';
+
+          return `<div class="file-item">
           <span class="file-icon">${icon}</span>
           <div class="file-info">
             <div class="file-name">${file.name}</div>
             <div class="file-size">${formatBytes(file.size)}</div>
           </div>
         </div>`;
-      }).join('')}
+        }).join('')}
     </div>
     
     <div class="success-note">
@@ -1631,14 +1789,14 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     </div>
     
     <div class="timestamp">
-      Generated on ${new Date().toLocaleString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })}
+      Generated on ${new Date().toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
     </div>
   </div>
   
@@ -1666,90 +1824,104 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
 </body>
 </html>
         `;
-        
+
         await successPage.setContent(html);
-        
+
         log('Success page displayed.');
-        
+
         // Exit when browser closes
         successBrowser.on('disconnected', () => {
           log('Browser closed. Exiting application...');
           process.exit(0);
         });
-        
+
         // Also handle page close
         successPage.on('close', () => {
           log('Page closed. Exiting application...');
           successBrowser.close().then(() => process.exit(0));
         });
-        
+
       } else {
         process.exit(code === null ? 0 : code);
       }
     });
 
 
-child.on('error', (e) => {
-  errlog('=== SCRAPER SPAWN ERROR ===');
-  errlog('Failed to start scraper:', e.message);
-  process.exit(1);
-});
+    child.on('error', (e) => {
+      errlog('=== SCRAPER SPAWN ERROR ===');
+      errlog('Failed to start scraper:', e.message);
+      process.exit(1);
+    });
 
-// Exit early - don't continue to test execution
-return;
+    // Exit early - don't continue to test execution
+    return;
   }
 
-log('=== CONFIGURING TEST EXECUTION ===');
+  log('=== CONFIGURING TEST EXECUTION ===');
 
-const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
-const gateway = String(selection.gateway || '');
-const testIndex = gatewayToTestMap[gateway];
 
-if (typeof testIndex === 'undefined') {
-  errlog(`No test mapping for gateway ${gateway}`);
-  errlog('Valid gateways:', Object.keys(gatewayToTestMap).join(', '));
-  process.exit(1);
-}
+  // Determine which carrier folder to use
+  let carrierFolder = 'mobilex'; // Default
+  const providerLower = String(selection.provider || '').toLowerCase();
 
-const link = String(selection.linkType || '').toLowerCase();
-const isLocal = (selection.process === 'Activation') && (link === 'internal' || link === 'local');
-const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
-const specPath = path.join(process.cwd(), 'tests', 'mobilex', procFolder, specFileName);
+  if (providerLower === 't-mobile' || providerLower === 'tmobile') {
+    carrierFolder = 'tmobile';
+  } else if (providerLower === 'at&t' || providerLower === 'att') {
+    carrierFolder = 'att';
+  } else if (providerLower === 'spectrum') {
+    carrierFolder = 'spectrum';
+  }
 
-log('Process folder:', procFolder);
-log('Gateway:', gateway, '→ Test index:', testIndex);
-log('Spec file:', specFileName);
-log('Full spec path:', specPath);
+  log('Carrier folder:', carrierFolder);
 
-if (!fs.existsSync(specPath)) {
-  errlog('TEST FILE NOT FOUND:', specPath);
-  errlog('Tests folder contents:', listFolder(path.join(process.cwd(), 'tests'), 200));
-  errlog('MobileX folder contents:', listFolder(path.join(process.cwd(), 'tests', 'mobilex'), 200));
-  errlog(`${procFolder} folder contents:`, listFolder(path.join(process.cwd(), 'tests', 'mobilex', procFolder), 200));
-  process.exit(1);
-}
+  const procFolder = String(selection.process || 'Activation').toLowerCase().startsWith('ref') ? 'refill' : 'activate';
+  const gateway = String(selection.gateway || '');
+  const testIndex = gatewayToTestMap[gateway];
 
-log('✓ Test file exists');
+  if (typeof testIndex === 'undefined') {
+    errlog(`No test mapping for gateway ${gateway}`);
+    errlog('Valid gateways:', Object.keys(gatewayToTestMap).join(', '));
+    process.exit(1);
+  }
 
-const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
+  const link = String(selection.linkType || '').toLowerCase();
+  const isLocal = (selection.process === 'Activation') && (link === 'internal' || link === 'local');
+  const specFileName = isLocal ? `test-${testIndex}-local.spec.ts` : `test-${testIndex}.spec.ts`;
+  const specPath = path.join(process.cwd(), 'tests', carrierFolder, procFolder, specFileName);
+  log('Process folder:', procFolder);
+  log('Gateway:', gateway, '→ Test index:', testIndex);
+  log('Spec file:', specFileName);
+  log('Full spec path:', specPath);
 
-// ========== PLAYWRIGHT CONFIG SETUP ==========
-log('=== PLAYWRIGHT CONFIG SETUP ===');
+  if (!fs.existsSync(specPath)) {
+    errlog('TEST FILE NOT FOUND:', specPath);
+    errlog('Tests folder contents:', listFolder(path.join(process.cwd(), 'tests'), 200));
+    errlog('MobileX folder contents:', listFolder(path.join(process.cwd(), 'tests', 'mobilex'), 200));
+    errlog(`${procFolder} folder contents:`, listFolder(path.join(process.cwd(), 'tests', 'mobilex', procFolder), 200));
+    process.exit(1);
+  }
 
-let configArg = '';
-const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
-const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+  log('✓ Test file exists');
 
-if (fs.existsSync(cfgTs)) {
-  configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
-  log('✓ Using playwright.config.ts');
-} else if (fs.existsSync(cfgJs)) {
-  configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
-  log('✓ Using playwright.config.js');
-} else {
-  errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
+  const relSpec = path.relative(process.cwd(), specPath).split(path.sep).join('/');
 
-  const emergencyConfig = `// Emergency config created by launcher
+  // ========== PLAYWRIGHT CONFIG SETUP ==========
+  log('=== PLAYWRIGHT CONFIG SETUP ===');
+
+  let configArg = '';
+  const cfgTs = path.join(process.cwd(), 'playwright.config.ts');
+  const cfgJs = path.join(process.cwd(), 'playwright.config.js');
+
+  if (fs.existsSync(cfgTs)) {
+    configArg = ` --config="${cfgTs.split(path.sep).join('/')}"`;
+    log('✓ Using playwright.config.ts');
+  } else if (fs.existsSync(cfgJs)) {
+    configArg = ` --config="${cfgJs.split(path.sep).join('/')}"`;
+    log('✓ Using playwright.config.js');
+  } else {
+    errlog('⚠ NO CONFIG FOUND! Creating emergency fallback...');
+
+    const emergencyConfig = `// Emergency config created by launcher
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
@@ -1772,70 +1944,70 @@ module.exports = defineConfig({
 });
 `;
 
-  const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
-  try {
-    fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
-    log('✓ Emergency config created:', emergencyPath);
-    configArg = ` --config="${emergencyPath.split(path.sep).join('/')}"`;
-  } catch (e) {
-    errlog('✗ FAILED to create emergency config:', e.message);
-    errlog('Cannot proceed without config file');
-    process.exit(1);
+    const emergencyPath = path.join(process.cwd(), 'playwright.config.js');
+    try {
+      fs.writeFileSync(emergencyPath, emergencyConfig, 'utf8');
+      log('✓ Emergency config created:', emergencyPath);
+      configArg = ` --config="${emergencyPath.split(path.sep).join('/')}"`;
+    } catch (e) {
+      errlog('✗ FAILED to create emergency config:', e.message);
+      errlog('Cannot proceed without config file');
+      process.exit(1);
+    }
   }
-}
 
-// ========== BROWSER PATH SETUP ==========
-// This is already set for the parent process.
-// We just need to ensure the child process (spawn) also gets it.
-const env = Object.assign({}, process.env);
+  // ========== BROWSER PATH SETUP ==========
+  // This is already set for the parent process.
+  // We just need to ensure the child process (spawn) also gets it.
+  const env = Object.assign({}, process.env);
 
-if (fs.existsSync(myBrowsersPath)) {
-  env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
-  log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
-} else {
-  log('⚠ Child process: my-browsers folder not found - will use system Playwright browsers');
-}
-// --- END BROWSER PATH SETUP ---
+  if (fs.existsSync(myBrowsersPath)) {
+    env.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+    log('✓ Child process PLAYWRIGHT_BROWSERS_PATH set to:', myBrowsersPath);
+  } else {
+    log('⚠ Child process: my-browsers folder not found - will use system Playwright browsers');
+  }
+  // --- END BROWSER PATH SETUP ---
 
-// --- SET ALL ENV VARS ---
-env.START_PORT = String(selection.startPortIndex || '1');
-log('✓ START_PORT set to:', env.START_PORT);
+  // --- SET ALL ENV VARS ---
+  env.START_PORT = String(selection.startPortIndex || '1');
+  log('✓ START_PORT set to:', env.START_PORT);
 
-// --- ADDED: Set Email strategy environment variables ---
-env.EMAIL_STRATEGY = String(selection.emailStrategy || 'single');
-env.EMAIL_SINGLE = String(selection.emailSingle || 'rb@usa.com');
-env.EMAIL_N = String(selection.emailN || '1');
-log('✓ EMAIL_STRATEGY set to:', env.EMAIL_STRATEGY);
-log('✓ EMAIL_SINGLE set to:', env.EMAIL_SINGLE);
-log('✓ EMAIL_N set to:', env.EMAIL_N);
-// --- END ADDED ---
+  // --- ADDED: Set Email strategy environment variables ---
+  env.EMAIL_STRATEGY = String(selection.emailStrategy || 'single');
+  env.EMAIL_SINGLE = String(selection.emailSingle || 'rb@usa.com');
+  env.EMAIL_N = String(selection.emailN || '1');
+  log('✓ EMAIL_STRATEGY set to:', env.EMAIL_STRATEGY);
+  log('✓ EMAIL_SINGLE set to:', env.EMAIL_SINGLE);
+  log('✓ EMAIL_N set to:', env.EMAIL_N);
+  // --- END ADDED ---
 
-// ========== FINAL COMMAND ==========
-const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
+  // ========== FINAL COMMAND ==========
+  const cmd = `npx playwright test "${relSpec}"${configArg} --headed --project=chromium --workers=1`;
 
-log('=== LAUNCHING PLAYWRIGHT ===');
-log('Command:', cmd);
-log('Working dir:', process.cwd());
-log('============================');
+  log('=== LAUNCHING PLAYWRIGHT ===');
+  log('Command:', cmd);
+  log('Working dir:', process.cwd());
+  log('============================');
 
-const child = spawn(cmd, {
-  shell: true,
-  stdio: 'inherit',
-  env,
-  cwd: process.cwd()
-});
+  const child = spawn(cmd, {
+    shell: true,
+    stdio: 'inherit',
+    env,
+    cwd: process.cwd()
+  });
 
-child.on('exit', (code) => {
-  log('=== TEST EXECUTION COMPLETED ===');
-  log('Exit code:', code);
-  process.exit(code === null ? 0 : code);
-});
+  child.on('exit', (code) => {
+    log('=== TEST EXECUTION COMPLETED ===');
+    log('Exit code:', code);
+    process.exit(code === null ? 0 : code);
+  });
 
-child.on('error', (e) => {
-  errlog('=== SPAWN ERROR ===');
-  errlog('Failed to start Playwright:', e.message);
-  errlog('Stack:', e.stack);
-  process.exit(1);
-});
+  child.on('error', (e) => {
+    errlog('=== SPAWN ERROR ===');
+    errlog('Failed to start Playwright:', e.message);
+    errlog('Stack:', e.stack);
+    process.exit(1);
+  });
 
-}) ();
+})();

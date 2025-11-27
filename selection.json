@@ -1,3 +1,11 @@
 {
-  "process": "Scrape"
+  "process": "Activation",
+  "provider": "t-mobile",
+  "gateway": "103",
+  "linkType": "external",
+  "startPortIndex": 1,
+  "emailStrategy": "single",
+  "emailSingle": "rb@usa.com",
+  "emailN": 1,
+  "reloadPorts": ""
 }
