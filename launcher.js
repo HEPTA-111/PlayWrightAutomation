@@ -238,7 +238,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     Array.from({ length: 10 }, (_, i) => 101 + i)
       .map(g => `<div class="gateway" data-gateway="${g}">Gateway ${g}</div>`).join('');
 
-  // --- MODIFIED: Complete UI Overhaul ---
+  // --- MODIFIED: Complete UI Overhaul (NO NESTED TEMPLATE LITERALS) ---
   const fullHtml = `<!doctype html>
 <html>
 <head>
@@ -539,7 +539,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             </span>
             <div>
-              <div class="label"Gateway Scraper>Inventory</div>
+              <div class="label">Inventory</div>
               <div class="muted">Inventory all gateways</div>
             </div>
           </div>
@@ -612,13 +612,16 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
         <div class="form-group" id="email-section">
           <div class="form-label">Email Management</div>
           <div class="email-manager">
-            <div class="email-list" id="email-list-container">
+            <!-- UNIQUE ID added -->
+            <div class="email-list" id="email-list-mobilex">
               <!-- Emails will be rendered here by JS -->
             </div>
-            <div class="email-status" id="email-status-display">Loaded 0 emails.</div>
+            <!-- UNIQUE ID added -->
+            <div class="email-status" id="email-status-mobilex">Loaded 0 emails.</div>
             <div class="email-add">
-              <input type="text" id="email-add-input" placeholder="add.new@example.com" />
-              <button class="btn primary" id="email-add-btn">Add</button>
+              <!-- UNIQUE IDs added -->
+              <input type="text" id="email-add-input-mobilex" placeholder="add.new@example.com" />
+              <button class="btn primary" id="email-add-btn-mobilex">Add</button>
             </div>
           </div>
         </div>
@@ -688,15 +691,15 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           </div>
         </div>
 
-        <!-- Reuse the same email section -->
+        <!-- Reuse the same email section with UNIQUE IDs -->
         <div class="form-group" id="tmobile-email-section">
           <div class="form-label">Email Management</div>
           <div class="email-manager">
-            <div class="email-list" id="email-list-container"></div>
-            <div class="email-status" id="email-status-display">Loaded 0 emails.</div>
+            <div class="email-list" id="email-list-tmobile"></div>
+            <div class="email-status" id="email-status-tmobile">Loaded 0 emails.</div>
             <div class="email-add">
-              <input type="text" id="email-add-input" placeholder="add.new@example.com" />
-              <button class="btn primary" id="email-add-btn">Add</button>
+              <input type="text" id="email-add-input-tmobile" placeholder="add.new@example.com" />
+              <button class="btn primary" id="email-add-btn-tmobile">Add</button>
             </div>
           </div>
         </div>
@@ -742,7 +745,163 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           </div>
         </div>
       </div>
+
+          <!-- === STEP 3c: AT&T OPTIONS === -->
+    <div id="step-att" class="step hidden">
+      <div class="step-header">Step 3 – AT&T Options</div>
       
+      <div class="form-group">
+        <div class="form-label">Choose Gateway (101–110)</div>
+        <div class="gateway-box" id="att-gateway-box">${makeGatewayHtml()}</div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Starting Port (A1–A64)</div>
+        <input id="att-start-port" type="number" min="1" max="64" value="1" />
+      </div>
+
+      <div class="form-group" id="att-link-type-section">
+        <div class="form-label">Link Type</div>
+        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="option att-linktype" data-link="external"><div class="label">External</div></div>
+          <div class="option att-linktype" data-link="internal"><div class="label">Internal</div></div>
+        </div>
+      </div>
+
+      <div class="form-group" id="att-email-section">
+        <div class="form-label">Email Management</div>
+        <div class="email-manager">
+          <div class="email-list" id="email-list-att"></div>
+          <div class="email-status" id="email-status-att">Loaded 0 emails.</div>
+          <div class="email-add">
+            <input type="text" id="email-add-input-att" placeholder="add.new@example.com" />
+            <button class="btn primary" id="email-add-btn-att">Add</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-group" id="att-email-strategy-section">
+        <div class="form-label">Email Usage Strategy</div>
+        <div class="grid" style="grid-template-columns: 1fr; gap: 10px;">
+          <div class="option" id="att-strat-single">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="att-email-strategy" value="single" style="margin-right:12px;" checked>
+              <div>
+                <div class="label">Use a Single Email</div>
+                <input id="att-email-single-input" type="text" value="rb@usa.com" style="width:250px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+              </div>
+            </label>
+          </div>
+          <div class="option" id="att-strat-loop">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="att-email-strategy" value="loop" style="margin-right:12px;">
+              <div>
+                <div class="label">Loop All Saved Emails</div>
+                <div class="muted" style="margin-top: 4px;">Uses email 1, 2, ... N, then repeats.</div>
+              </div>
+            </label>
+          </div>
+          <div class="option" id="att-strat-n-times">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="att-email-strategy" value="n-times" style="margin-right:12px;">
+              <div>
+                <div class="label">Loop First 'N' Saved Emails</div>
+                <input id="att-email-n-input" type="number" value="1" min="1" max="100" style="width:80px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="controls">
+        <div class="muted">Review and finish</div>
+        <div>
+          <button class="btn ghost" id="att-back">← Back</button>
+          <button class="btn primary" id="att-finish">Finish</button>
+        </div>
+      </div>
+    </div>
+
+        <!-- === STEP 3d: SPECTRUM OPTIONS === -->
+    <div id="step-spectrum" class="step hidden">
+      <div class="step-header">Step 3 – Spectrum Options</div>
+      
+      <div class="form-group">
+        <div class="form-label">Choose Gateway (101–110)</div>
+        <div class="gateway-box" id="spectrum-gateway-box">${makeGatewayHtml()}</div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Starting Port (A1–A64)</div>
+        <input id="spectrum-start-port" type="number" min="1" max="64" value="1" />
+      </div>
+
+      <div class="form-group" id="spectrum-link-type-section">
+        <div class="form-label">Link Type</div>
+        <div class="grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="option spectrum-linktype" data-link="external"><div class="label">External</div></div>
+          <div class="option spectrum-linktype" data-link="internal"><div class="label">Internal</div></div>
+        </div>
+      </div>
+
+      <div class="form-group" id="spectrum-email-section">
+        <div class="form-label">Email Management</div>
+        <div class="email-manager">
+          <div class="email-list" id="email-list-spectrum"></div>
+          <div class="email-status" id="email-status-spectrum">Loaded 0 emails.</div>
+          <div class="email-add">
+            <input type="text" id="email-add-input-spectrum" placeholder="add.new@example.com" />
+            <button class="btn primary" id="email-add-btn-spectrum">Add</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-group" id="spectrum-email-strategy-section">
+        <div class="form-label">Email Usage Strategy</div>
+        <div class="grid" style="grid-template-columns: 1fr; gap: 10px;">
+          <div class="option" id="spectrum-strat-single">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="spectrum-email-strategy" value="single" style="margin-right:12px;" checked>
+              <div>
+                <div class="label">Use a Single Email</div>
+                <input id="spectrum-email-single-input" type="text" value="rb@usa.com" style="width:250px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+              </div>
+            </label>
+          </div>
+          <div class="option" id="spectrum-strat-loop">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="spectrum-email-strategy" value="loop" style="margin-right:12px;">
+              <div>
+                <div class="label">Loop All Saved Emails</div>
+                <div class="muted" style="margin-top: 4px;">Uses email 1, 2, ... N, then repeats.</div>
+              </div>
+            </label>
+          </div>
+          <div class="option" id="spectrum-strat-n-times">
+            <label style="display:flex; align-items:center; width:100%; cursor:pointer;">
+              <input type="radio" name="spectrum-email-strategy" value="n-times" style="margin-right:12px;">
+              <div>
+                <div class="label">Loop First 'N' Saved Emails</div>
+                <input id="spectrum-email-n-input" type="number" value="1" min="1" max="100" style="width:80px; padding: 6px 8px; margin-top: 6px; font-size: 13px;" onclick="event.stopPropagation();">
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="controls">
+        <div class="muted">Review and finish</div>
+        <div>
+          <button class="btn ghost" id="spectrum-back">← Back</button>
+          <button class="btn primary" id="spectrum-finish">Finish</button>
+        </div>
+      </div>
+    </div>
+      
+
+
+
+
       <!-- === STEP 4: RELOAD PORTS === -->
       <div id="step-reload" class="step hidden">
         <div class="step-header">Power Cycle</div>
@@ -788,25 +947,28 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
   <!-- Toast Notification element -->
   <div id="toast" class="toast"></div>
 
-  <script>
+<script>
     const state = { 
-      process:null, 
-      provider:null, 
-      gateway:null, 
-      linkType:null, 
-      startPortIndex:1,
-      // --- ADDED state props ---
-      emails: [], // This will be populated from emails.json
+      process: null, 
+      provider: null, 
+      gateway: null, 
+      linkType: null, 
+      startPortIndex: 1,
+      emails: window.__INITIAL_EMAILS__ || [], 
       emailStrategy: 'single',
       emailSingle: 'rb@usa.com',
       emailN: 1,
-      reloadPorts: '' // For the reload script
+      reloadPorts: ''
     };
 
-    function q(sel, all=false) { return all ? Array.from(document.querySelectorAll(sel)) : document.querySelector(sel); }
-    function clearSelected(selector) { q(selector, true).forEach(e=>e.classList.remove('selected')); }
+    function q(sel, all=false) { 
+      return all ? Array.from(document.querySelectorAll(sel)) : document.querySelector(sel); 
+    }
+    
+    function clearSelected(selector) { 
+      q(selector, true).forEach(e => e.classList.remove('selected')); 
+    }
 
-    // --- ADDED: Toast function ---
     let toastTimer;
     function toast(message, duration = 2000) {
       const el = q('#toast');
@@ -819,54 +981,60 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       }, duration);
     }
     
-    // --- ADDED: Show/Hide Steps ---
     function showStep(stepId) {
       q('.step', true).forEach(s => s.classList.add('hidden'));
-      q(stepId) && q(stepId).classList.remove('hidden');
+      const targetStep = q(stepId);
+      if (targetStep) targetStep.classList.remove('hidden');
     }
 
-    // --- ADDED: Step 1 Next Button Logic ---
     const toNextStepBtn = q('#to-next-step');
     function updateStep1Next() {
-        if (!state.process) {
-          toNextStepBtn.disabled = true;
-          return;
-        }
-        toNextStepBtn.disabled = false;
-        if (state.process === 'Reload') {
-          toNextStepBtn.textContent = 'Configure →';
-        } else if (state.process === 'Scrape') {
-          toNextStepBtn.textContent = 'Take Inventory →';
-        } else {
-          toNextStepBtn.textContent = 'Next →';
-        }
+      if (!state.process) {
+        toNextStepBtn.disabled = true;
+        return;
       }
+      toNextStepBtn.disabled = false;
+      if (state.process === 'Reload') {
+        toNextStepBtn.textContent = 'Configure →';
+      } else if (state.process === 'Scrape') {
+        toNextStepBtn.textContent = 'Take Inventory →';
+      } else {
+        toNextStepBtn.textContent = 'Next →';
+      }
+    }
 
     // === STEP 1: Process Selection ===
-    q('#opt-activation').addEventListener('click', ()=>{ 
-      clearSelected('.option'); q('#opt-activation').classList.add('selected'); 
-      state.process='Activation'; 
+    q('#opt-activation').addEventListener('click', () => { 
+      clearSelected('#step-process .option'); 
+      q('#opt-activation').classList.add('selected'); 
+      state.process = 'Activation'; 
       updateStep1Next();
     });
-    q('#opt-refill').addEventListener('click', ()=>{ 
-      clearSelected('.option'); q('#opt-refill').classList.add('selected'); 
-      state.process='Refill';
+    
+    q('#opt-refill').addEventListener('click', () => { 
+      clearSelected('#step-process .option'); 
+      q('#opt-refill').classList.add('selected'); 
+      state.process = 'Refill';
       updateStep1Next();
     });
-    q('#opt-reload').addEventListener('click', ()=>{ 
-      clearSelected('.option'); q('#opt-reload').classList.add('selected'); 
-      state.process='Reload';
+    
+    q('#opt-reload').addEventListener('click', () => { 
+      clearSelected('#step-process .option'); 
+      q('#opt-reload').classList.add('selected'); 
+      state.process = 'Reload';
       updateStep1Next();
     });
-    q('#opt-scrape').addEventListener('click', ()=>{ 
-      clearSelected('.option'); q('#opt-scrape').classList.add('selected'); 
-      state.process='Scrape';
+    
+    q('#opt-scrape').addEventListener('click', () => { 
+      clearSelected('#step-process .option'); 
+      q('#opt-scrape').classList.add('selected'); 
+      state.process = 'Scrape';
       updateStep1Next();
     });
 
-    q('#proc-reset').addEventListener('click', ()=>{ 
-      state.process=null; 
-      clearSelected('.option'); 
+    q('#proc-reset').addEventListener('click', () => { 
+      state.process = null; 
+      clearSelected('#step-process .option'); 
       updateStep1Next();
     });
     
@@ -874,12 +1042,14 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       window.location.reload();
     });
     
-   q('#to-next-step').addEventListener('click', () => {
-      if (!state.process) return;
+    q('#to-next-step').addEventListener('click', () => {
+      if (!state.process) {
+        alert('Please select a process first');
+        return;
+      }
       if (state.process === 'Reload') {
         showStep('#step-reload');
       } else if (state.process === 'Scrape') {
-        // Run scrape immediately and close UI
         if (typeof window.onSelection === 'function') {
           const payload = { process: 'Scrape' };
           window.onSelection(payload);
@@ -892,15 +1062,23 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     });
 
     // === STEP 2: Provider Selection ===
-    q('.provider', true).forEach(el=>{
+    q('.provider', true).forEach(el => {
       el.addEventListener('click', () => {
         clearSelected('.provider');
         el.classList.add('selected');
         state.provider = el.dataset.provider;
       });
     });
-    q('#to-next').addEventListener('click', ()=> {
-      if (!state.provider) { alert('Please choose a provider'); return; }
+    
+    q('#prov-back').addEventListener('click', () => { 
+      showStep('#step-process'); 
+    });
+    
+    q('#to-next').addEventListener('click', () => {
+      if (!state.provider) { 
+        alert('Please choose a provider'); 
+        return; 
+      }
       
       if (state.provider === 'MobileX') {
         const linkSection = q('#link-type-section');
@@ -919,8 +1097,41 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           if (emailStrategySection) emailStrategySection.style.display = 'block';
         }
         showStep('#step-mobilex');
+      } else if (state.provider === 'AT&T') {
+        const linkSection = q('#att-link-type-section');
+        const emailSection = q('#att-email-section');
+        const emailStrategySection = q('#att-email-strategy-section');
+        
+        if (state.process === 'Refill') {
+          if (linkSection) linkSection.style.display = 'none';
+          if (emailSection) emailSection.style.display = 'none';
+          if (emailStrategySection) emailStrategySection.style.display = 'none';
+          state.linkType = null;
+          clearSelected('.att-linktype');
+        } else {
+          if (linkSection) linkSection.style.display = 'block';
+          if (emailSection) emailSection.style.display = 'block';
+          if (emailStrategySection) emailStrategySection.style.display = 'block';
+        }
+        showStep('#step-att');
+      } else if (state.provider === 'Spectrum') {
+        const linkSection = q('#spectrum-link-type-section');
+        const emailSection = q('#spectrum-email-section');
+        const emailStrategySection = q('#spectrum-email-strategy-section');
+        
+        if (state.process === 'Refill') {
+          if (linkSection) linkSection.style.display = 'none';
+          if (emailSection) emailSection.style.display = 'none';
+          if (emailStrategySection) emailStrategySection.style.display = 'none';
+          state.linkType = null;
+          clearSelected('.spectrum-linktype');
+        } else {
+          if (linkSection) linkSection.style.display = 'block';
+          if (emailSection) emailSection.style.display = 'block';
+          if (emailStrategySection) emailStrategySection.style.display = 'block';
+        }
+        showStep('#step-spectrum');
       } else if (state.provider === 't-mobile') {
-        // Same logic for T-Mobile
         const linkSection = q('#tmobile-link-type-section');
         const emailSection = q('#tmobile-email-section');
         const emailStrategySection = q('#tmobile-email-strategy-section');
@@ -944,7 +1155,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     });
 
     // === STEP 3: MobileX Options ===
-    q('#gateway-box').querySelectorAll('.gateway').forEach(g=>{
+    q('#gateway-box').querySelectorAll('.gateway').forEach(g => {
       g.addEventListener('click', () => {
         clearSelected('#gateway-box .gateway'); 
         g.classList.add('selected'); 
@@ -952,7 +1163,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       });
     });
 
-    q('.linktype', true).forEach(l=>{
+    q('.linktype', true).forEach(l => {
       l.addEventListener('click', () => {
         clearSelected('.linktype'); 
         l.classList.add('selected'); 
@@ -961,24 +1172,33 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     });
 
     const startPortInput = q('#start-port');
-    startPortInput.addEventListener('input', () => {
-      let v = parseInt(startPortInput.value || '1', 10);
-      if (isNaN(v)) v = 1;
-      if (v < 1) v = 1;
-      if (v > 64) v = 64;
-      startPortInput.value = String(v);
-      state.startPortIndex = v;
+    if (startPortInput) {
+      startPortInput.addEventListener('input', () => {
+        let v = parseInt(startPortInput.value || '1', 10);
+        if (isNaN(v)) v = 1;
+        if (v < 1) v = 1;
+        if (v > 64) v = 64;
+        startPortInput.value = String(v);
+        state.startPortIndex = v;
+      });
+    }
+
+    q('#mobilex-back').addEventListener('click', () => { 
+      showStep('#step-provider'); 
     });
 
-    q('#mobilex-back').addEventListener('click', ()=> { showStep('#step-provider'); });
-
-    q('#mobilex-finish').addEventListener('click', ()=> {
-      if (!state.gateway) { alert('Please choose a gateway'); return; }
-      if (state.process === 'Activation' && !state.linkType) { alert('Please choose a link type'); return; }
+    q('#mobilex-finish').addEventListener('click', () => {
+      if (!state.gateway) { 
+        alert('Please choose a gateway'); 
+        return; 
+      }
+      if (state.process === 'Activation' && !state.linkType) { 
+        alert('Please choose a link type'); 
+        return; 
+      }
       
       state.startPortIndex = parseInt(startPortInput.value || '1', 10) || 1;
       
-      // --- ADDED: Get Email Strategy State ---
       if (state.process === 'Activation') {
         state.emailStrategy = q('input[name="email-strategy"]:checked').value || 'single';
         state.emailSingle = q('#email-single-input').value || 'rb@usa.com';
@@ -989,25 +1209,25 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       showStep('#step-confirm');
     });
 
-
-          // === STEP 3b: T-Mobile Options ===
-      q('#tmobile-gateway-box').querySelectorAll('.gateway').forEach(g=>{
-        g.addEventListener('click', () => {
-          clearSelected('#tmobile-gateway-box .gateway'); 
-          g.classList.add('selected'); 
-          state.gateway = g.dataset.gateway;
-        });
+    // === STEP 3b: T-Mobile Options ===
+    q('#tmobile-gateway-box').querySelectorAll('.gateway').forEach(g => {
+      g.addEventListener('click', () => {
+        clearSelected('#tmobile-gateway-box .gateway'); 
+        g.classList.add('selected'); 
+        state.gateway = g.dataset.gateway;
       });
+    });
 
-      q('.tmobile-linktype', true).forEach(l=>{
-        l.addEventListener('click', () => {
-          clearSelected('.tmobile-linktype'); 
-          l.classList.add('selected'); 
-          state.linkType = l.dataset.link;
-        });
+    q('.tmobile-linktype', true).forEach(l => {
+      l.addEventListener('click', () => {
+        clearSelected('.tmobile-linktype'); 
+        l.classList.add('selected'); 
+        state.linkType = l.dataset.link;
       });
+    });
 
-      const tmobileStartPortInput = q('#tmobile-start-port');
+    const tmobileStartPortInput = q('#tmobile-start-port');
+    if (tmobileStartPortInput) {
       tmobileStartPortInput.addEventListener('input', () => {
         let v = parseInt(tmobileStartPortInput.value || '1', 10);
         if (isNaN(v)) v = 1;
@@ -1016,54 +1236,192 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
         tmobileStartPortInput.value = String(v);
         state.startPortIndex = v;
       });
+    }
 
-      q('#tmobile-back').addEventListener('click', ()=> { showStep('#step-provider'); });
+    q('#tmobile-back').addEventListener('click', () => { 
+      showStep('#step-provider'); 
+    });
 
-      q('#tmobile-finish').addEventListener('click', ()=> {
-        if (!state.gateway) { alert('Please choose a gateway'); return; }
-        if (state.process === 'Activation' && !state.linkType) { alert('Please choose a link type'); return; }
-        
-        state.startPortIndex = parseInt(tmobileStartPortInput.value || '1', 10) || 1;
-        
-        if (state.process === 'Activation') {
-          state.emailStrategy = q('input[name="tmobile-email-strategy"]:checked').value || 'single';
-          state.emailSingle = q('#tmobile-email-single-input').value || 'rb@usa.com';
-          state.emailN = parseInt(q('#tmobile-email-n-input').value, 10) || 1;
-        }
-        
-        updateSummary();
-        showStep('#step-confirm');
+    q('#tmobile-finish').addEventListener('click', () => {
+      if (!state.gateway) { 
+        alert('Please choose a gateway'); 
+        return; 
+      }
+      if (state.process === 'Activation' && !state.linkType) { 
+        alert('Please choose a link type'); 
+        return; 
+      }
+      
+      state.startPortIndex = parseInt(tmobileStartPortInput.value || '1', 10) || 1;
+      
+      if (state.process === 'Activation') {
+        state.emailStrategy = q('input[name="tmobile-email-strategy"]:checked').value || 'single';
+        state.emailSingle = q('#tmobile-email-single-input').value || 'rb@usa.com';
+        state.emailN = parseInt(q('#tmobile-email-n-input').value, 10) || 1;
+      }
+      
+      updateSummary();
+      showStep('#step-confirm');
+    });
+
+    q('#tmobile-strat-single').addEventListener('click', () => {
+      q('input[name="tmobile-email-strategy"][value="single"]').checked = true;
+    });
+    q('#tmobile-strat-loop').addEventListener('click', () => {
+      q('input[name="tmobile-email-strategy"][value="loop"]').checked = true;
+    });
+    q('#tmobile-strat-n-times').addEventListener('click', () => {
+      q('input[name="tmobile-email-strategy"][value="n-times"]').checked = true;
+    });
+
+    // === STEP 3c: AT&T Options ===
+    q('#att-gateway-box').querySelectorAll('.gateway').forEach(g => {
+      g.addEventListener('click', () => {
+        clearSelected('#att-gateway-box .gateway'); 
+        g.classList.add('selected'); 
+        state.gateway = g.dataset.gateway;
       });
+    });
 
-      // Email strategy radio selection
-      q('#tmobile-strat-single').addEventListener('click', () => 
-        q('input[name="tmobile-email-strategy"][value="single"]').checked = true
-      );
-      q('#tmobile-strat-loop').addEventListener('click', () => 
-        q('input[name="tmobile-email-strategy"][value="loop"]').checked = true
-      );
-      q('#tmobile-strat-n-times').addEventListener('click', () => 
-        q('input[name="tmobile-email-strategy"][value="n-times"]').checked = true
-      );
+    q('.att-linktype', true).forEach(l => {
+      l.addEventListener('click', () => {
+        clearSelected('.att-linktype'); 
+        l.classList.add('selected'); 
+        state.linkType = l.dataset.link;
+      });
+    });
 
+    const attStartPortInput = q('#att-start-port');
+    if (attStartPortInput) {
+      attStartPortInput.addEventListener('input', () => {
+        let v = parseInt(attStartPortInput.value || '1', 10);
+        if (isNaN(v)) v = 1;
+        if (v < 1) v = 1;
+        if (v > 64) v = 64;
+        attStartPortInput.value = String(v);
+        state.startPortIndex = v;
+      });
+    }
 
+    q('#att-back').addEventListener('click', () => { 
+      showStep('#step-provider'); 
+    });
 
+    q('#att-finish').addEventListener('click', () => {
+      if (!state.gateway) { 
+        alert('Please choose a gateway'); 
+        return; 
+      }
+      if (state.process === 'Activation' && !state.linkType) { 
+        alert('Please choose a link type'); 
+        return; 
+      }
+      
+      state.startPortIndex = parseInt(attStartPortInput.value || '1', 10) || 1;
+      
+      if (state.process === 'Activation') {
+        state.emailStrategy = q('input[name="att-email-strategy"]:checked').value || 'single';
+        state.emailSingle = q('#att-email-single-input').value || 'rb@usa.com';
+        state.emailN = parseInt(q('#att-email-n-input').value, 10) || 1;
+      }
+      
+      updateSummary();
+      showStep('#step-confirm');
+    });
 
+    q('#att-strat-single').addEventListener('click', () => {
+      q('input[name="att-email-strategy"][value="single"]').checked = true;
+    });
+    q('#att-strat-loop').addEventListener('click', () => {
+      q('input[name="att-email-strategy"][value="loop"]').checked = true;
+    });
+    q('#att-strat-n-times').addEventListener('click', () => {
+      q('input[name="att-email-strategy"][value="n-times"]').checked = true;
+    });
 
+    // === STEP 3d: Spectrum Options ===
+    q('#spectrum-gateway-box').querySelectorAll('.gateway').forEach(g => {
+      g.addEventListener('click', () => {
+        clearSelected('#spectrum-gateway-box .gateway'); 
+        g.classList.add('selected'); 
+        state.gateway = g.dataset.gateway;
+      });
+    });
+
+    q('.spectrum-linktype', true).forEach(l => {
+      l.addEventListener('click', () => {
+        clearSelected('.spectrum-linktype'); 
+        l.classList.add('selected'); 
+        state.linkType = l.dataset.link;
+      });
+    });
+
+    const spectrumStartPortInput = q('#spectrum-start-port');
+    if (spectrumStartPortInput) {
+      spectrumStartPortInput.addEventListener('input', () => {
+        let v = parseInt(spectrumStartPortInput.value || '1', 10);
+        if (isNaN(v)) v = 1;
+        if (v < 1) v = 1;
+        if (v > 64) v = 64;
+        spectrumStartPortInput.value = String(v);
+        state.startPortIndex = v;
+      });
+    }
+
+    q('#spectrum-back').addEventListener('click', () => { 
+      showStep('#step-provider'); 
+    });
+
+    q('#spectrum-finish').addEventListener('click', () => {
+      if (!state.gateway) { 
+        alert('Please choose a gateway'); 
+        return; 
+      }
+      if (state.process === 'Activation' && !state.linkType) { 
+        alert('Please choose a link type'); 
+        return; 
+      }
+      
+      state.startPortIndex = parseInt(spectrumStartPortInput.value || '1', 10) || 1;
+      
+      if (state.process === 'Activation') {
+        state.emailStrategy = q('input[name="spectrum-email-strategy"]:checked').value || 'single';
+        state.emailSingle = q('#spectrum-email-single-input').value || 'rb@usa.com';
+        state.emailN = parseInt(q('#spectrum-email-n-input').value, 10) || 1;
+      }
+      
+      updateSummary();
+      showStep('#step-confirm');
+    });
+
+    q('#spectrum-strat-single').addEventListener('click', () => {
+      q('input[name="spectrum-email-strategy"][value="single"]').checked = true;
+    });
+    q('#spectrum-strat-loop').addEventListener('click', () => {
+      q('input[name="spectrum-email-strategy"][value="loop"]').checked = true;
+    });
+    q('#spectrum-strat-n-times').addEventListener('click', () => {
+      q('input[name="spectrum-email-strategy"][value="n-times"]').checked = true;
+    });
 
     // === STEP 4: Power Cycle ===
-    q('#reload-gateway-box').querySelectorAll('.gateway').forEach(g=>{
+    q('#reload-gateway-box').querySelectorAll('.gateway').forEach(g => {
       g.addEventListener('click', () => {
         clearSelected('#reload-gateway-box .gateway'); 
         g.classList.add('selected'); 
-        state.gateway = g.dataset.gateway; // Re-use state.gateway
+        state.gateway = g.dataset.gateway;
       });
     });
     
-    q('#reload-back').addEventListener('click', () => { showStep('#step-process'); });
+    q('#reload-back').addEventListener('click', () => { 
+      showStep('#step-process'); 
+    });
     
     q('#reload-run').addEventListener('click', async () => {
-      if (!state.gateway) { alert('Please choose a gateway to reload'); return; }
+      if (!state.gateway) { 
+        alert('Please choose a gateway to reload'); 
+        return; 
+      }
       
       state.reloadPorts = q('#reload-ports-input').value || '';
       const gateway = state.gateway;
@@ -1071,14 +1429,14 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       const btn = q('#reload-run');
       btn.disabled = true;
       btn.textContent = 'Reloading...';
-      toast(\`Starting reload for Gateway \${gateway}...\`);
+      toast('Starting reload for Gateway ' + gateway + '...');
 
       if (typeof window.runReloadPorts === 'function') {
         const result = await window.runReloadPorts(gateway, state.reloadPorts);
         if (result.success) {
-          toast(\`Gateway \${gateway} reload finished successfully.\`, 3000);
+          toast('Gateway ' + gateway + ' reload finished successfully.', 3000);
         } else {
-          toast(\`Reload failed: \${result.error || 'Unknown error'}\`, 4000);
+          toast('Reload failed: ' + (result.error || 'Unknown error'), 4000);
         }
       } else {
         alert('ERROR: runReloadPorts function not found!');
@@ -1086,7 +1444,6 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       
       btn.disabled = false;
       btn.textContent = 'Run Reload';
-      // Go back to step 1
       showStep('#step-process');
       state.gateway = null;
       clearSelected('#reload-gateway-box .gateway');
@@ -1097,12 +1454,11 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       const s = [];
       s.push('<strong>Process:</strong> ' + (state.process || '-'));
       s.push('<strong>Provider:</strong> ' + (state.provider || '-'));
-      if (state.provider === 'MobileX') {
+      if (state.provider === 'MobileX' || state.provider === 't-mobile' || state.provider === 'AT&T' || state.provider === 'Spectrum') {
         s.push('<strong>Gateway:</strong> ' + (state.gateway || '-'));
         s.push('<strong>Start Port:</strong> A' + (state.startPortIndex || '-'));
         if (state.process === 'Activation') {
           s.push('<strong>Link:</strong> ' + (state.linkType || '-'));
-          // --- ADDED: Email Summary ---
           s.push('<strong>Email Strategy:</strong> ' + (state.emailStrategy || '-'));
           if (state.emailStrategy === 'single') {
             s.push('<strong>Email:</strong> ' + (state.emailSingle || '-'));
@@ -1115,172 +1471,183 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
           s.push('<strong>Link:</strong> N/A (Refill)');
         }
       }
-      q('#summary').innerHTML = s.map(x => '<div style="margin-bottom:6px;">'+x+'</div>').join('');
+      q('#summary').innerHTML = s.map(x => '<div style="margin-bottom:6px;">' + x + '</div>').join('');
     }
 
-      q('#confirm-back').addEventListener('click', ()=> {
-        if (state.provider === 'MobileX') {
-          showStep('#step-mobilex');
-        } else if (state.provider === 't-mobile') {
-          showStep('#step-tmobile');
-        } else {
-          showStep('#step-provider');
-        }
-      });
+    q('#confirm-back').addEventListener('click', () => {
+      if (state.provider === 'MobileX') {
+        showStep('#step-mobilex');
+      } else if (state.provider === 't-mobile') {
+        showStep('#step-tmobile');
+      } else if (state.provider === 'AT&T') {
+        showStep('#step-att');
+      } else if (state.provider === 'Spectrum') {
+        showStep('#step-spectrum');
+      } else {
+        showStep('#step-provider');
+      }
+    });
 
-    q('#confirm-launch').addEventListener('click', ()=> {
+    q('#confirm-launch').addEventListener('click', () => {
       if (typeof window.onSelection === 'function') {
         const payload = Object.assign({}, state);
-        delete payload.emails; // Don't send the full list, just the strategy
+        delete payload.emails;
         window.onSelection(payload);
       } else {
         alert('ERROR: Launcher bridge not available!');
       }
     });
     
-    // === ADDED: Email Manager Logic ===
-    const emailListContainer = q('#email-list-container');
-    const emailStatusDisplay = q('#email-status-display');
-    const emailAddInput = q('#email-add-input');
+    // === Email Manager Logic ===
+    const provs = ['mobilex', 'tmobile', 'att', 'spectrum'];
 
     function renderEmailList() {
-      if (!emailListContainer || !emailStatusDisplay) return;
-      
-      emailListContainer.innerHTML = ''; // Clear list
-      
-      if (state.emails.length === 0) {
-        emailListContainer.innerHTML = '<div class="muted" style="padding: 12px;">No emails saved. Add one below.</div>';
-      }
-      
-      state.emails.forEach((email, index) => {
-        const row = document.createElement('div');
-        row.className = 'email-row';
+      provs.forEach(p => {
+        const container = document.getElementById('email-list-' + p);
+        const status = document.getElementById('email-status-' + p);
         
-        const text = document.createElement('div');
-        text.className = 'email-text';
-        text.textContent = email;
+        if (!container) return;
         
-        const editInput = document.createElement('input');
-        editInput.type = 'text';
-        editInput.className = 'hidden';
-        editInput.value = email;
+        container.innerHTML = '';
         
-        const actions = document.createElement('div');
-        actions.className = 'email-actions';
+        if (state.emails.length === 0) {
+          container.innerHTML = '<div class="muted" style="padding: 12px;">No emails saved. Add one below.</div>';
+        }
         
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn ghost';
-        editBtn.textContent = 'Edit';
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn danger';
-        deleteBtn.textContent = 'Delete';
-        
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'btn primary hidden';
-        saveBtn.textContent = 'Save';
-        
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'btn ghost hidden';
-        cancelBtn.textContent = 'Cancel';
-        
-        // Edit flow
-        editBtn.addEventListener('click', () => {
-          text.classList.add('hidden');
-          editInput.classList.remove('hidden');
-          editBtn.classList.add('hidden');
-          deleteBtn.classList.add('hidden');
-          saveBtn.classList.remove('hidden');
-          cancelBtn.classList.remove('hidden');
-          editInput.focus();
-        });
-        
-        // Cancel flow
-        cancelBtn.addEventListener('click', () => {
-          text.classList.remove('hidden');
-          editInput.classList.add('hidden');
-          editBtn.classList.remove('hidden');
-          deleteBtn.classList.remove('hidden');
-          saveBtn.classList.add('hidden');
-          cancelBtn.classList.add('hidden');
-        });
-        // Save flow
-        saveBtn.addEventListener('click', () => {
-          const newEmail = editInput.value.trim();
-          if (newEmail && newEmail.includes('@')) {
-            state.emails[index] = newEmail;
-            text.textContent = newEmail;
-            persistEmails(); // Save to file
-          }
-          // Always revert UI
-          cancelBtn.click();
-        });
+        state.emails.forEach((email, index) => {
+          const row = document.createElement('div');
+          row.className = 'email-row';
+          
+          const text = document.createElement('div');
+          text.className = 'email-text';
+          text.textContent = email;
+          
+          const editInput = document.createElement('input');
+          editInput.type = 'text';
+          editInput.className = 'hidden';
+          editInput.value = email;
+          
+          const actions = document.createElement('div');
+          actions.className = 'email-actions';
+          
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn ghost';
+          editBtn.textContent = 'Edit';
+          
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn danger';
+          deleteBtn.textContent = 'Delete';
+          
+          const saveBtn = document.createElement('button');
+          saveBtn.className = 'btn primary hidden';
+          saveBtn.textContent = 'Save';
+          
+          const cancelBtn = document.createElement('button');
+          cancelBtn.className = 'btn ghost hidden';
+          cancelBtn.textContent = 'Cancel';
+          
+          editBtn.addEventListener('click', () => {
+            text.classList.add('hidden');
+            editInput.classList.remove('hidden');
+            editBtn.classList.add('hidden');
+            deleteBtn.classList.add('hidden');
+            saveBtn.classList.remove('hidden');
+            cancelBtn.classList.remove('hidden');
+            editInput.focus();
+          });
+          
+          cancelBtn.addEventListener('click', () => {
+            text.classList.remove('hidden');
+            editInput.classList.add('hidden');
+            editBtn.classList.remove('hidden');
+            deleteBtn.classList.remove('hidden');
+            saveBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+          });
+          
+          saveBtn.addEventListener('click', () => {
+            const newEmail = editInput.value.trim();
+            if (newEmail && newEmail.includes('@')) {
+              state.emails[index] = newEmail;
+              text.textContent = newEmail;
+              persistEmails();
+            }
+            cancelBtn.click();
+          });
 
-        // Delete flow
-        deleteBtn.addEventListener('click', () => {
-          // Removed confirm() because Playwright auto-dismisses it
-          state.emails.splice(index, 1);
-          persistEmails();
+          deleteBtn.addEventListener('click', () => {
+            state.emails.splice(index, 1);
+            persistEmails();
+          });
+          
+          row.appendChild(text);
+          row.appendChild(editInput);
+          row.appendChild(actions);
+          actions.appendChild(editBtn);
+          actions.appendChild(deleteBtn);
+          actions.appendChild(saveBtn);
+          actions.appendChild(cancelBtn);
+          container.appendChild(row);
         });
-        row.appendChild(text);
-        row.appendChild(editInput);
-        row.appendChild(actions);
-        actions.appendChild(editBtn);
-        actions.appendChild(deleteBtn);
-        actions.appendChild(saveBtn);
-        actions.appendChild(cancelBtn);
-        emailListContainer.appendChild(row);
+        
+        if (status) status.textContent = 'Loaded ' + state.emails.length + ' of 100 emails.';
       });
-      
-      emailStatusDisplay.textContent = \`Loaded \${state.emails.length} of 100 emails.\`;
     }
     
-    // Add new email
-    q('#email-add-btn').addEventListener('click', () => {
-      if (state.emails.length >= 100) {
-        alert('Email limit (100) reached.');
-        return;
-      }
-      const newEmail = emailAddInput.value.trim();
-      if (newEmail && newEmail.includes('@')) {
-        if (state.emails.includes(newEmail)) {
-          alert('Email already in list.');
-          return;
-        }
-        state.emails.push(newEmail);
-        persistEmails();
-        renderEmailList();
-        emailAddInput.value = '';
-      } else {
-        alert('Please enter a valid email.');
+    provs.forEach(p => {
+      const btn = document.getElementById('email-add-btn-' + p);
+      const input = document.getElementById('email-add-input-' + p);
+      
+      if (btn && input) {
+        btn.addEventListener('click', () => {
+          if (state.emails.length >= 100) {
+            alert('Email limit (100) reached.');
+            return;
+          }
+          const newEmail = input.value.trim();
+          if (newEmail && newEmail.includes('@')) {
+            if (state.emails.includes(newEmail)) {
+              alert('Email already in list.');
+              return;
+            }
+            state.emails.push(newEmail);
+            persistEmails();
+            
+            provs.forEach(x => {
+              const i = document.getElementById('email-add-input-' + x);
+              if (i) i.value = '';
+            });
+          } else {
+            alert('Please enter a valid email.');
+          }
+        });
       }
     });
 
-    // Persist to Node.js
     async function persistEmails() {
       if (typeof window.saveEmails === 'function') {
         const result = await window.saveEmails(state.emails);
         if (result.success) {
-          state.emails = result.emails; // Get back the sanitized list
+          state.emails = result.emails;
           toast('Email list saved.');
         } else {
           toast('Error saving emails.');
         }
-        renderEmailList(); // Re-render
+        renderEmailList();
       }
     }
     
-    // Auto-select radio button when clicking option block
-    q('#strat-single').addEventListener('click', () => q('input[name="email-strategy"][value="single"]').checked = true);
-    q('#strat-loop').addEventListener('click', () => q('input[name="email-strategy"][value="loop"]').checked = true);
-    q('#strat-n-times').addEventListener('click', () => q('input[name="email-strategy"][value="n-times"]').checked = true);
+    q('#strat-single').addEventListener('click', () => {
+      q('input[name="email-strategy"][value="single"]').checked = true;
+    });
+    q('#strat-loop').addEventListener('click', () => {
+      q('input[name="email-strategy"][value="loop"]').checked = true;
+    });
+    q('#strat-n-times').addEventListener('click', () => {
+      q('input[name="email-strategy"][value="n-times"]').checked = true;
+    });
     
-    // --- Function to receive initial emails from Node.js ---
-    window.loadInitialEmails = (emails) => {
-      state.emails = emails;
-      renderEmailList();
-    };
-
+    renderEmailList();
   </script>
 </body>
 </html>`;
@@ -1301,14 +1668,13 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
   // --- END ADDED ---
 
   try {
+    // Inject existing emails securely via init script instead of eval loop
+    await page.addInitScript((emails) => {
+      window.__INITIAL_EMAILS__ = emails;
+    }, existingEmails);
+
     await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
     log('✓ UI loaded successfully');
-
-    // --- ADDED: Inject loaded emails into the page ---
-    await page.evaluate((emails) => {
-      window.loadInitialEmails(emails);
-    }, existingEmails);
-    // --- END ADDED ---
 
   } catch (e) {
     errlog('Failed to render UI:', e.message);
@@ -1802,6 +2168,7 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
   
   <script>
     function copyPath() {
+      // FIX: Escaped inner backticks for success HTML
       const path = \`${reportsFolder.replace(/\\/g, '\\\\')}\`;
       navigator.clipboard.writeText(path).then(() => {
         const btn = event.target;
@@ -1860,8 +2227,8 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
   log('=== CONFIGURING TEST EXECUTION ===');
 
 
-  // Determine which carrier folder to use
-  let carrierFolder = 'mobilex'; // Default
+    // Determine which carrier folder to use
+  let carrierFolder = 'mobilex';
   const providerLower = String(selection.provider || '').toLowerCase();
 
   if (providerLower === 't-mobile' || providerLower === 'tmobile') {
@@ -2011,3 +2378,4 @@ module.exports = defineConfig({
   });
 
 })();
+

@@ -1,0 +1,16 @@
+{
+  "data": [],
+  "errors": [
+    "Gateway 101 FAILED: page.goto: net::ERR_ABORTED; maybe frame was detached?\nCall log:\n\u001b[2m  - navigating to \"http://192.168.1.101/login_en.html\", waiting until \"load\"\u001b[22m\n",
+    "Gateway 102 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 103 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 104 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 105 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 106 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 107 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 108 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 109 FAILED: page.goto: Target page, context or browser has been closed",
+    "Gateway 110 FAILED: page.goto: Target page, context or browser has been closed"
+  ],
+  "timestamp": "2025-11-27T08:45:00.752Z"
+}

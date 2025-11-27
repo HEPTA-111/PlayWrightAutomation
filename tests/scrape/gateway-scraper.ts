@@ -2,6 +2,7 @@ import { type Page, type FrameLocator } from '@playwright/test';
 import * as GatewayConfig from '../reload_ports/gateway-config';
 import * as fs from 'fs';
 import * as path from 'path';
+
 /**
  * Represents scraped data for a single port
  */
@@ -23,41 +24,56 @@ async function loginToGateway(page: Page, gatewayId: GatewayConfig.GatewayId) {
   }
   
   console.log(`Attempting to log in to: ${config.url} (Gateway ${gatewayId})`);
-  await page.goto(config.url, { timeout: 30000 });
+  
+  await page.goto(config.url, { timeout: 120000 });
+  
+  await page.locator('#accountID').click();
   await page.locator('#accountID').fill('root');
   await page.locator('#passwordID2').click();
   await page.locator('#passwordID').fill(config.password);
-
-  console.log('Submitting login...');
-  await page.getByText('Submit').click();
+  await page.locator('#passwordID').press('Enter');
+  
   console.log('Login submitted.');
 }
 
 /**
  * Sends an AT command and waits for results
  */
-async function sendATCommand(rightFrame: FrameLocator, command: string, page: Page): Promise<void> {
+async function sendATCommand(page: Page, command: string): Promise<void> {
   console.log(`Sending AT command: ${command}`);
-  await rightFrame.locator('#ID_goip_at_cmd').fill(command);
-  await rightFrame.getByRole('checkbox', { name: 'All' }).check();
   
-  const buttonName = `${command} \u00a0 Send`;
-  await rightFrame.getByRole('cell', { name: buttonName }).getByRole('button').click();
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().locator('#ID_goip_at_cmd').click();
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().locator('#ID_goip_at_cmd').fill(command);
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().getByRole('checkbox', { name: 'All' }).check();
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().getByRole('cell', { name: `${command}   Send` }).getByRole('button').click();
   
   // Wait for command to process
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(8000);
 }
 
 /**
  * Extracts data from AT command response rows
  */
-async function extractATData(rightFrame: FrameLocator, command: string): Promise<{ [port: string]: string | null }> {
+async function extractATData(page: Page, command: string): Promise<{ [port: string]: string | null }> {
   console.log(`Extracting data for ${command}...`);
   
+  const rightFrame = page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame();
+  
   // Wait for OK responses
-  await rightFrame.locator('td:has-text("OK")').first().waitFor({ state: 'visible', timeout: 60000 }).catch(() => {
-    console.warn(`Timeout waiting for ${command} responses`);
-  });
+  try {
+    await rightFrame.locator('td:has-text("OK")').first().waitFor({ state: 'visible', timeout: 90000 });
+    
+    let okCount = 0;
+    const maxRetries = 15;
+    for(let i = 0; i < maxRetries; i++) {
+      okCount = await rightFrame.locator('td:has-text("OK")').count();
+      if (okCount > 50) break;
+      await page.waitForTimeout(2000);
+    }
+    console.log(`Found ${okCount} "OK" responses.`);
+  } catch (e) {
+    console.warn(`Timeout waiting for ${command} responses: ${(e as Error).message}`);
+  }
   
   const data: { [port: string]: string | null } = {};
   for (let i = 1; i <= 64; i++) {
@@ -110,7 +126,6 @@ async function extractATData(rightFrame: FrameLocator, command: string): Promise
         }
       }
     } else if (command === 'at+cnum') {
-      // For MDN, look for phone numbers
       const cnumMatch = txt.match(/\+CNUM:\s*"[^"]*","\+?(\d{10,})"/i);
       if (cnumMatch) {
         value = cnumMatch[1];
@@ -142,36 +157,46 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
   
   await loginToGateway(page, gatewayId);
   
-  // Wait for frames to load
-  console.log('Waiting for frames to load...');
-  const mainFrameLocator = page.getByText('</body> </html>');
-  await mainFrameLocator.waitFor({ state: 'visible', timeout: 30000 });
-  const mainFrame = mainFrameLocator.contentFrame();
+  // Wait for frames to load after login
+  console.log('Waiting for frames to load after login...');
+  await page.waitForTimeout(5000);
   
-  const leftFrameLocator = mainFrame.locator('frame[name="left"]');
-  await leftFrameLocator.waitFor({ state: 'visible', timeout: 10000 });
-  const leftFrame = leftFrameLocator.contentFrame();
+  // --- CRITICAL FIX: Click "Gateway settings" FIRST, then "Port Settings" ---
+  console.log('Navigating to Gateway settings...');
+  try {
+    await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByText('Gateway settings').click();
+    console.log('Clicked Gateway settings');
+  } catch (e) {
+    console.warn('Could not click Gateway settings text, trying alternative...');
+    // Fallback to the ID-based approach
+    const leftFrame = await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame();
+    await leftFrame.locator('#ID_Settings_Plus_Minus').click();
+  }
   
-  const rightFrameLocator = mainFrame.locator('frame[name="right"]');
-  await rightFrameLocator.waitFor({ state: 'visible', timeout: 10000 });
-  const rightFrame = rightFrameLocator.contentFrame();
+  await page.waitForTimeout(2000);
   
   console.log('Navigating to Port Settings...');
-  await leftFrame.locator('#ID_Settings_Plus_Minus').click();
-  await leftFrame.getByRole('link', { name: 'Port Settings' }).click();
-  await rightFrame.locator('#ID_goip_at_cmd').waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByRole('link', { name: 'Port Settings' }).click();
+  
+  console.log('Waiting for Port Settings page to load...');
+  await page.waitForTimeout(5000);
+  
+  // Verify the input field is ready
+  const rightFrame = page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame();
+  await rightFrame.locator('#ID_goip_at_cmd').waitFor({ state: 'visible', timeout: 60000 });
+  console.log('Port Settings page loaded and ready.');
   
   // Scrape IMEI (at+cgsn)
-  await sendATCommand(rightFrame, 'at+cgsn', page);
-  const imeiData = await extractATData(rightFrame, 'at+cgsn');
+  await sendATCommand(page, 'at+cgsn');
+  const imeiData = await extractATData(page, 'at+cgsn');
   
   // Scrape ICCID (at+ccid)
-  await sendATCommand(rightFrame, 'at+ccid', page);
-  const iccidData = await extractATData(rightFrame, 'at+ccid');
+  await sendATCommand(page, 'at+ccid');
+  const iccidData = await extractATData(page, 'at+ccid');
   
   // Scrape MDN (at+cnum)
-  await sendATCommand(rightFrame, 'at+cnum', page);
-  const mdnData = await extractATData(rightFrame, 'at+cnum');
+  await sendATCommand(page, 'at+cnum');
+  const mdnData = await extractATData(page, 'at+cnum');
   
   // Combine data for all ports
   const portDataArray: PortData[] = [];
@@ -185,75 +210,66 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
       mdn = mdn.substring(1);
     }
     
-const portData: PortData = {
+    const portData: PortData = {
       port: `${gatewayId}-${portKey}`,
       mdn: mdn,
       iccid: iccidData[portKey],
       imei: imeiData[portKey],
-      status: 'inactive' // Default status, will be updated below
+      status: 'inactive'
     };
     
-    // We'll determine actual status after scraping all data
     portDataArray.push(portData);
   }
   
-  // Now scrape the actual port status from the gateway UI
-  console.log('Scraping port status indicators...');
-  await leftFrame.getByRole('link', { name: 'Port Status' }).click();
-  await page.waitForTimeout(2000);
+  // Scrape port status
+  console.log('Navigating to Port Status...');
+  await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByRole('link', { name: 'Port Status' }).click();
+  await page.waitForTimeout(10000);
   
-  // Wait for status table to load
-  await rightFrame.locator('table').first().waitFor({ state: 'visible', timeout: 10000 });
+  // Get status for each port
+  const rightFrameStatus = page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame();
   
-  // Scrape status for each port
-  const statusRows = rightFrame.locator('tr:has(td)');
-  const statusRowCount = await statusRows.count();
-  
-  for (let i = 0; i < statusRowCount; i++) {
-    const row = statusRows.nth(i);
-    const rowText = await row.textContent().catch(() => '');
+  try {
+    await rightFrameStatus.locator('table').first().waitFor({ state: 'visible', timeout: 60000 });
     
-    if (!rowText) continue;
+    const statusRows = rightFrameStatus.locator('tr:has(td)');
+    const statusRowCount = await statusRows.count();
     
-    // Extract port number (e.g., "1A", "2A", etc.)
-    const portMatch = rowText.match(/(\d{1,2})A/);
-    if (!portMatch) continue;
-    
-    const portNum = parseInt(portMatch[1], 10);
-    const portKey = `A${portNum}`;
-    
-    // Find the corresponding port in our data array
-    const portDataIndex = portDataArray.findIndex(p => p.port === `${gatewayId}-${portKey}`);
-    if (portDataIndex === -1) continue;
-    
-    // Check for status indicator images or classes
-    try {
-      // Look for status indicators - the gateway typically uses images or colored elements
-      const statusCell = row.locator('td').first();
-      const statusHtml = await statusCell.innerHTML().catch(() => '');
+    for (let i = 0; i < statusRowCount; i++) {
+      const row = statusRows.nth(i);
+      const rowText = await row.textContent().catch(() => '');
       
-      // Detect status based on image src or background color
-      // Red dot (offline.png or red background) = inactive
-      // Green dot (online.png or green background) = active  
-      // Green circle with white center (weaksignal.png or specific class) = weak-signal
+      if (!rowText) continue;
       
-      if (statusHtml.includes('offline') || statusHtml.includes('red') || statusHtml.includes('#ff0000') || statusHtml.includes('rgb(255, 0, 0)')) {
-        portDataArray[portDataIndex].status = 'inactive';
-      } else if (statusHtml.includes('weaksignal') || statusHtml.includes('weak') || statusHtml.includes('yellow') || statusHtml.includes('circle')) {
-        portDataArray[portDataIndex].status = 'weak-signal';
-      } else if (statusHtml.includes('online') || statusHtml.includes('green') || statusHtml.includes('#00ff00') || statusHtml.includes('rgb(0, 255, 0)') || statusHtml.includes('rgb(0, 128, 0)')) {
-        portDataArray[portDataIndex].status = 'active';
-      }
+      const portMatch = rowText.match(/(\d{1,2})A/);
+      if (!portMatch) continue;
       
-      console.log(`${portKey}: ${portDataArray[portDataIndex].status}`);
+      const portNum = parseInt(portMatch[1], 10);
+      const portKey = `A${portNum}`;
+      
+      const portDataIndex = portDataArray.findIndex(p => p.port === `${gatewayId}-${portKey}`);
+      if (portDataIndex === -1) continue;
+      
+      try {
+        const statusCell = row.locator('td').first();
+        const statusHtml = await statusCell.innerHTML().catch(() => '');
+        
+        if (statusHtml.includes('offline') || statusHtml.includes('red') || statusHtml.includes('#ff0000') || statusHtml.includes('rgb(255, 0, 0)')) {
+          portDataArray[portDataIndex].status = 'inactive';
+        } else if (statusHtml.includes('weaksignal') || statusHtml.includes('weak') || statusHtml.includes('yellow') || statusHtml.includes('circle')) {
+          portDataArray[portDataIndex].status = 'weak-signal';
+        } else if (statusHtml.includes('online') || statusHtml.includes('green') || statusHtml.includes('#00ff00') || statusHtml.includes('rgb(0, 255, 0)') || statusHtml.includes('rgb(0, 128, 0)')) {
+          portDataArray[portDataIndex].status = 'active';
+        }
       } catch (e) {
-      console.warn(`Could not determine status for ${portKey}`);
+        console.warn(`Could not determine status for ${portKey}`);
+      }
     }
-  
+  } catch (e) {
+    console.warn('Could not scrape port status:', (e as Error).message);
   }
   
-console.log(`Gateway ${gatewayId} scrape complete. Found data for ${portDataArray.filter(p => p.imei).length}/64 ports`);
-  console.log(`Status breakdown - Active: ${portDataArray.filter(p => p.status === 'active').length}, Weak Signal: ${portDataArray.filter(p => p.status === 'weak-signal').length}, Inactive: ${portDataArray.filter(p => p.status === 'inactive').length}`);
+  console.log(`Gateway ${gatewayId} scrape complete. Found data for ${portDataArray.filter(p => p.imei).length}/64 ports`);
   
   return portDataArray;
 }
@@ -276,7 +292,6 @@ export async function scrapeAllGateways(page: Page): Promise<{ data: PortData[],
       const errorMsg = `Gateway ${gatewayId} FAILED: ${(error as Error).message}`;
       console.error(errorMsg);
       errors.push(errorMsg);
-      // Continue with next gateway
     }
   }
   
@@ -311,7 +326,6 @@ export function formatScrapedData(data: PortData[], errors: string[]): string {
   lines.push('='.repeat(100));
   lines.push('');
   
-  // Group by gateway
   const groupedData: { [gateway: string]: PortData[] } = {};
   data.forEach(port => {
     const gateway = port.port.split('-')[0];
@@ -340,7 +354,6 @@ export function formatScrapedData(data: PortData[], errors: string[]): string {
   lines.push('');
   lines.push('='.repeat(100));
   
-  // Summary statistics
   const activeCount = data.filter(p => p.status === 'active').length;
   const weakCount = data.filter(p => p.status === 'weak-signal').length;
   const inactiveCount = data.filter(p => p.status === 'inactive').length;
@@ -365,14 +378,11 @@ export function saveScrapedData(data: PortData[], errors: string[], outputPath: 
   const jsonPath = path.join(outputPath, `GW_Inventory_${timestamp}.json`);
   const errorPath = path.join(outputPath, `GW_Inventory_Errors_${timestamp}.log`);
   
-  // Save as formatted text
   const formattedText = formatScrapedData(data, errors);
   fs.writeFileSync(txtPath, formattedText, 'utf8');
   
-  // Save as JSON for programmatic access
   fs.writeFileSync(jsonPath, JSON.stringify({ data, errors, timestamp: new Date().toISOString() }, null, 2), 'utf8');
   
-  // Save errors separately
   if (errors.length > 0) {
     fs.writeFileSync(errorPath, errors.join('\n'), 'utf8');
   }
