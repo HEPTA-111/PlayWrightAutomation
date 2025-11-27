@@ -11,7 +11,42 @@ export interface PortData {
   mdn: string | null;
   iccid: string | null;
   imei: string | null;
-  status: 'active' | 'inactive' | 'weak-signal';
+  carrier: string; // New field for Carrier
+  status: 'active' | 'inactive' | 'weak-signal' | 'error';
+  missingData: string[]; // To track exactly what is missing
+}
+
+/**
+ * Detects carrier based on ICCID (SIM Number)
+ * Based on IIN (Issuer Identifier Number) and MNC (Mobile Network Code)
+ */
+function detectCarrier(iccid: string | null): string {
+  if (!iccid || iccid.length < 7) return 'Unknown';
+
+  // Remove any non-digit characters
+  const cleanIccid = iccid.replace(/\D/g, '');
+
+  // Verizon: Starts with 8914
+  if (cleanIccid.startsWith('8914')) return 'Verizon';
+
+  // US Telecom: Starts with 8901
+  if (cleanIccid.startsWith('8901')) {
+    // Digits 5, 6, 7 represent the MNC (Mobile Network Code)
+    // Note: substring(4, 7) gets characters at index 4, 5, 6 (the 5th, 6th, 7th digits)
+    const mnc = cleanIccid.substring(4, 7);
+    
+    // AT&T Common Codes
+    if (['030', '150', '170', '280', '380', '410', '560', '680'].includes(mnc)) {
+      return 'AT&T';
+    }
+    
+    // T-Mobile Common Codes
+    if (['026', '160', '240', '260', '490', '580', '800'].includes(mnc)) {
+      return 'T-Mobile';
+    }
+  }
+
+  return 'Other/Unknown';
 }
 
 /**
@@ -25,6 +60,7 @@ async function loginToGateway(page: Page, gatewayId: GatewayConfig.GatewayId) {
   
   console.log(`Attempting to log in to: ${config.url} (Gateway ${gatewayId})`);
   
+  // Increased timeout for internal IPs which might be slower
   await page.goto(config.url, { timeout: 120000 });
   
   await page.locator('#accountID').click();
@@ -42,13 +78,20 @@ async function loginToGateway(page: Page, gatewayId: GatewayConfig.GatewayId) {
 async function sendATCommand(page: Page, command: string): Promise<void> {
   console.log(`Sending AT command: ${command}`);
   
-  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().locator('#ID_goip_at_cmd').click();
-  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().locator('#ID_goip_at_cmd').fill(command);
-  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().getByRole('checkbox', { name: 'All' }).check();
-  await page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame().getByRole('cell', { name: `${command}   Send` }).getByRole('button').click();
-  
-  // Wait for command to process
-  await page.waitForTimeout(8000);
+  try {
+    const rightFrame = page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame();
+    await rightFrame.locator('#ID_goip_at_cmd').waitFor({ state: 'visible', timeout: 30000 });
+    await rightFrame.locator('#ID_goip_at_cmd').click();
+    await rightFrame.locator('#ID_goip_at_cmd').fill(command);
+    await rightFrame.getByRole('checkbox', { name: 'All' }).check();
+    // Use explicit text matching for the button to avoid regex issues
+    await rightFrame.getByRole('cell', { name: `${command}   Send` }).getByRole('button').click();
+    
+    // Wait for command to process
+    await page.waitForTimeout(8000);
+  } catch (e) {
+    console.warn(`Failed to send command ${command}: ${(e as Error).message}`);
+  }
 }
 
 /**
@@ -61,6 +104,7 @@ async function extractATData(page: Page, command: string): Promise<{ [port: stri
   
   // Wait for OK responses
   try {
+    // Wait for at least one OK to appear
     await rightFrame.locator('td:has-text("OK")').first().waitFor({ state: 'visible', timeout: 90000 });
     
     let okCount = 0;
@@ -161,16 +205,16 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
   console.log('Waiting for frames to load after login...');
   await page.waitForTimeout(5000);
   
-  // --- CRITICAL FIX: Click "Gateway settings" FIRST, then "Port Settings" ---
+  // --- ROBUST NAVIGATION (Fixes hanging on internal IPs) ---
   console.log('Navigating to Gateway settings...');
   try {
-    await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByText('Gateway settings').click();
+    await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByText('Gateway settings').click({ timeout: 10000 });
     console.log('Clicked Gateway settings');
   } catch (e) {
-    console.warn('Could not click Gateway settings text, trying alternative...');
+    console.warn('Could not click Gateway settings text, trying alternative ID...');
     // Fallback to the ID-based approach
     const leftFrame = await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame();
-    await leftFrame.locator('#ID_Settings_Plus_Minus').click();
+    await leftFrame.locator('#ID_Settings_Plus_Minus').click({ timeout: 5000 });
   }
   
   await page.waitForTimeout(2000);
@@ -181,10 +225,11 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
   console.log('Waiting for Port Settings page to load...');
   await page.waitForTimeout(5000);
   
-  // Verify the input field is ready
+  // Verify the input field is ready to prevent stuck logic
   const rightFrame = page.getByText('</body> </html>').contentFrame().locator('frame[name="right"]').contentFrame();
   await rightFrame.locator('#ID_goip_at_cmd').waitFor({ state: 'visible', timeout: 60000 });
   console.log('Port Settings page loaded and ready.');
+  // --- END ROBUST NAVIGATION ---
   
   // Scrape IMEI (at+cgsn)
   await sendATCommand(page, 'at+cgsn');
@@ -204,24 +249,37 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
   for (let i = 1; i <= 64; i++) {
     const portKey = `A${i}`;
     let mdn = mdnData[portKey];
+    const iccid = iccidData[portKey];
+    const imei = imeiData[portKey];
     
-    // Remove leading "1" from MDN if present
+    // Remove leading "1" from MDN if present (e.g. 15551234567 -> 5551234567)
     if (mdn && mdn.length === 11 && mdn.startsWith('1')) {
       mdn = mdn.substring(1);
     }
     
+    // Detect Carrier
+    const carrier = detectCarrier(iccid);
+    
+    // Calculate missing data
+    const missingData: string[] = [];
+    if (!mdn) missingData.push('MDN');
+    if (!iccid) missingData.push('ICCID');
+    if (!imei) missingData.push('IMEI');
+    
     const portData: PortData = {
       port: `${gatewayId}-${portKey}`,
       mdn: mdn,
-      iccid: iccidData[portKey],
-      imei: imeiData[portKey],
-      status: 'inactive'
+      iccid: iccid,
+      imei: imei,
+      carrier: carrier,
+      status: 'inactive', // Default
+      missingData: missingData
     };
     
     portDataArray.push(portData);
   }
   
-  // Scrape port status
+  // Scrape port status visuals
   console.log('Navigating to Port Status...');
   await page.getByText('</body> </html>').contentFrame().locator('frame[name="left"]').contentFrame().getByRole('link', { name: 'Port Status' }).click();
   await page.waitForTimeout(10000);
@@ -250,17 +308,43 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
       const portDataIndex = portDataArray.findIndex(p => p.port === `${gatewayId}-${portKey}`);
       if (portDataIndex === -1) continue;
       
+      const currentPort = portDataArray[portDataIndex];
+      
       try {
         const statusCell = row.locator('td').first();
-        const statusHtml = await statusCell.innerHTML().catch(() => '');
+        const statusHtml = (await statusCell.innerHTML().catch(() => '')).toLowerCase();
+        
+        // --- Determine Visual State ---
+        let visualState = 'unknown';
         
         if (statusHtml.includes('offline') || statusHtml.includes('red') || statusHtml.includes('#ff0000') || statusHtml.includes('rgb(255, 0, 0)')) {
-          portDataArray[portDataIndex].status = 'inactive';
+          visualState = 'red-dot';
+        } else if (statusHtml.includes('exclamation') || statusHtml.includes('error') || statusHtml.includes('alert')) {
+          visualState = 'error';
         } else if (statusHtml.includes('weaksignal') || statusHtml.includes('weak') || statusHtml.includes('yellow') || statusHtml.includes('circle')) {
-          portDataArray[portDataIndex].status = 'weak-signal';
+          visualState = 'green-circle';
         } else if (statusHtml.includes('online') || statusHtml.includes('green') || statusHtml.includes('#00ff00') || statusHtml.includes('rgb(0, 255, 0)') || statusHtml.includes('rgb(0, 128, 0)')) {
-          portDataArray[portDataIndex].status = 'active';
+          visualState = 'green-dot';
         }
+
+        // --- Apply Strict Business Logic ---
+        // "Active" only if Green Dot AND all data present
+        const hasAllData = currentPort.missingData.length === 0;
+
+        if (visualState === 'red-dot') {
+          currentPort.status = 'inactive';
+        } else if (visualState === 'error') {
+          currentPort.status = 'error'; // Red exclamation is always an error
+        } else if (visualState === 'green-circle') {
+          currentPort.status = 'weak-signal'; // Online but weak
+        } else if (visualState === 'green-dot') {
+          if (hasAllData) {
+            currentPort.status = 'active'; // The only true ACTIVE state
+          } else {
+            currentPort.status = 'error'; // Green dot but missing data = Error/Partial
+          }
+        }
+
       } catch (e) {
         console.warn(`Could not determine status for ${portKey}`);
       }
@@ -269,7 +353,7 @@ export async function scrapeGateway(page: Page, gatewayId: GatewayConfig.Gateway
     console.warn('Could not scrape port status:', (e as Error).message);
   }
   
-  console.log(`Gateway ${gatewayId} scrape complete. Found data for ${portDataArray.filter(p => p.imei).length}/64 ports`);
+  console.log(`Gateway ${gatewayId} scrape complete. Active: ${portDataArray.filter(p => p.status === 'active').length}`);
   
   return portDataArray;
 }
@@ -304,28 +388,21 @@ export async function scrapeAllGateways(page: Page): Promise<{ data: PortData[],
 export function formatScrapedData(data: PortData[], errors: string[]): string {
   const lines: string[] = [];
   
-  lines.push('='.repeat(100));
+  lines.push('='.repeat(120));
   lines.push('GATEWAY INVENTORY REPORT');
   lines.push('Generated: ' + new Date().toISOString());
-  lines.push('='.repeat(100));
+  lines.push('='.repeat(120));
   lines.push('');
   
   if (errors.length > 0) {
     lines.push('ERRORS ENCOUNTERED:');
     errors.forEach(err => lines.push(`  ❌ ${err}`));
     lines.push('');
-    lines.push('='.repeat(100));
+    lines.push('='.repeat(120));
     lines.push('');
   }
   
-  lines.push('Legend:');
-  lines.push('  🟢 Active (Green Dot) - Port has MDN, ICCID, and IMEI');
-  lines.push('  🔴 Inactive (Red Dot) - Port is missing data or not responding');
-  lines.push('  🟡 Weak Signal (Yellow Circle) - Port has IMEI/ICCID but no MDN');
-  lines.push('');
-  lines.push('='.repeat(100));
-  lines.push('');
-  
+  // Group by gateway
   const groupedData: { [gateway: string]: PortData[] } = {};
   data.forEach(port => {
     const gateway = port.port.split('-')[0];
@@ -337,34 +414,32 @@ export function formatScrapedData(data: PortData[], errors: string[]): string {
   
   Object.keys(groupedData).sort().forEach(gateway => {
     lines.push(`\nGATEWAY ${gateway}`);
-    lines.push('-'.repeat(100));
-    lines.push(`${'PORT'.padEnd(12)} ${'STATUS'.padEnd(20)} ${'MDN'.padEnd(15)} ${'ICCID'.padEnd(22)} ${'IMEI'.padEnd(18)}`);
-    lines.push('-'.repeat(100));
+    lines.push('-'.repeat(120));
+    lines.push(`${'PORT'.padEnd(12)} ${'STATUS'.padEnd(15)} ${'CARRIER'.padEnd(12)} ${'MDN'.padEnd(15)} ${'ICCID'.padEnd(22)} ${'IMEI'.padEnd(18)} ${'NOTES'}`);
+    lines.push('-'.repeat(120));
     
     groupedData[gateway].forEach(port => {
-      const statusIcon = port.status === 'active' ? '🟢' : port.status === 'weak-signal' ? '🟡' : '🔴';
-      const statusText = port.status === 'active' ? 'Active' : port.status === 'weak-signal' ? 'Weak Signal' : 'Inactive';
+      let statusIcon = '🔴';
+      let statusText = 'Inactive';
+      
+      if (port.status === 'active') {
+        statusIcon = '🟢';
+        statusText = 'Active';
+      } else if (port.status === 'weak-signal') {
+        statusIcon = '🟡';
+        statusText = 'Weak Sig';
+      } else if (port.status === 'error') {
+        statusIcon = '⚠️ ';
+        statusText = 'Error';
+      }
+      
+      const missingStr = port.missingData.length > 0 ? `MISSING: ${port.missingData.join(',')}` : '';
       
       lines.push(
-        `${port.port.padEnd(12)} ${(statusIcon + ' ' + statusText).padEnd(20)} ${(port.mdn || 'N/A').padEnd(15)} ${(port.iccid || 'N/A').padEnd(22)} ${(port.imei || 'N/A').padEnd(18)}`
+        `${port.port.padEnd(12)} ${(statusIcon + ' ' + statusText).padEnd(15)} ${port.carrier.padEnd(12)} ${(port.mdn || 'N/A').padEnd(15)} ${(port.iccid || 'N/A').padEnd(22)} ${(port.imei || 'N/A').padEnd(18)} ${missingStr}`
       );
     });
   });
-  
-  lines.push('');
-  lines.push('='.repeat(100));
-  
-  const activeCount = data.filter(p => p.status === 'active').length;
-  const weakCount = data.filter(p => p.status === 'weak-signal').length;
-  const inactiveCount = data.filter(p => p.status === 'inactive').length;
-  
-  lines.push('SUMMARY');
-  lines.push('-'.repeat(100));
-  lines.push(`Total Ports Scanned: ${data.length}`);
-  lines.push(`🟢 Active: ${activeCount}`);
-  lines.push(`🟡 Weak Signal: ${weakCount}`);
-  lines.push(`🔴 Inactive: ${inactiveCount}`);
-  lines.push('='.repeat(100));
   
   return lines.join('\n');
 }
