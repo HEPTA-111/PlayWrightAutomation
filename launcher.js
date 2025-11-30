@@ -544,11 +544,19 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
             </div>
           </div>
 
-          <div class="option disabled" id="opt-unassigned-1">
-            <span class="swatch unassigned">?</span>
+          <div class="option" id="opt-iq" data-process="IQ">
+            <span class="swatch" style="background: #17a2b8;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </span>
             <div>
-              <div class="label">Unassigned 1</div>
-              <div class="muted">Future process</div>
+              <div class="label">IQ Report</div>
+              <div class="muted">PrepaidIQ line details</div>
             </div>
           </div>
           <div class="option disabled" id="opt-unassigned-2">
@@ -1031,6 +1039,14 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       state.process = 'Scrape';
       updateStep1Next();
     });
+    
+    
+  q('#opt-iq').addEventListener('click', () => { 
+    clearSelected('#step-process .option'); 
+    q('#opt-iq').classList.add('selected'); 
+    state.process = 'IQ';
+    updateStep1Next();
+  });
 
     q('#proc-reset').addEventListener('click', () => { 
       state.process = null; 
@@ -1052,6 +1068,14 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
       } else if (state.process === 'Scrape') {
         if (typeof window.onSelection === 'function') {
           const payload = { process: 'Scrape' };
+          window.onSelection(payload);
+        } else {
+          alert('ERROR: Launcher bridge not available!');
+        }
+      } else if (state.process === 'IQ') {
+        // NEW: IQ Report flow
+        if (typeof window.onSelection === 'function') {
+          const payload = { process: 'IQ' };
           window.onSelection(payload);
         } else {
           alert('ERROR: Launcher bridge not available!');
@@ -2224,10 +2248,125 @@ const outputPath = process.env.OUTPUT_PATH || process.cwd();
     return;
   }
 
+
+  if (selection.process === 'IQ') {
+    log('=== STARTING IQ LINE DETAILS SCRAPING ===');
+
+    // Step 1: Run IQ scraper spec
+    const iqSpecPath = path.join(process.cwd(), 'tests', 'scrape', 'iq-scraper.spec.ts');
+
+    if (!fs.existsSync(iqSpecPath)) {
+      errlog('IQ SCRAPER SPEC NOT FOUND:', iqSpecPath);
+      process.exit(1);
+    }
+
+    const relIQSpec = path.relative(process.cwd(), iqSpecPath).split(path.sep).join('/');
+    const iqCmd = `npx playwright test "${relIQSpec}" --headed --project=chromium --workers=1`;
+
+    const iqEnv = Object.assign({}, process.env);
+    iqEnv.PLAYWRIGHT_BROWSERS_PATH = myBrowsersPath;
+    iqEnv.OUTPUT_PATH = outputPath;
+
+    log('Command:', iqCmd);
+    log('Output path:', outputPath);
+
+    const iqChild = spawn(iqCmd, {
+      shell: true,
+      stdio: 'inherit',
+      env: iqEnv,
+      cwd: process.cwd()
+    });
+
+    iqChild.on('exit', async (code) => {
+      log('=== IQ SCRAPER COMPLETED ===');
+      log('Exit code:', code);
+
+      if (code !== 0) {
+        errlog('IQ Scraper failed with exit code:', code);
+        process.exit(code || 1);
+      }
+
+      // Step 2: Generate PDF
+      log('=== GENERATING IQ PDF ===');
+      const pdfGenPath = path.join(process.cwd(), 'tests', 'scrape', 'run-generate-iq.js');
+      const pdfGenCmd = `node "${pdfGenPath}"`;
+
+      const pdfEnv = Object.assign({}, process.env);
+      pdfEnv.OUTPUT_PATH = outputPath;
+
+      const pdfChild = spawn(pdfGenCmd, {
+        shell: true,
+        stdio: 'inherit',
+        env: pdfEnv,
+        cwd: process.cwd()
+      });
+
+      pdfChild.on('exit', async (pdfCode) => {
+        if (pdfCode !== 0) {
+          errlog('PDF generation failed with exit code:', pdfCode);
+          process.exit(pdfCode || 1);
+        }
+
+        // Step 3: Move files to Inventory Reports
+        const today = new Date().toISOString().split('T')[0];
+        const reportsFolder = path.join(outputPath, 'Inventory Reports');
+
+        if (!fs.existsSync(reportsFolder)) {
+          fs.mkdirSync(reportsFolder, { recursive: true });
+        }
+
+        // Find and move JSON
+        // In the IQ handler section where files are moved:
+        // Find and move JSON
+        const jsonFiles = fs.readdirSync(outputPath).filter(f => f.startsWith('IQ_Enhanced_') && f.endsWith('.json'));
+        jsonFiles.forEach(f => {
+          const src = path.join(outputPath, f);
+          const dest = path.join(reportsFolder, f);
+          fs.copyFileSync(src, dest);
+          fs.unlinkSync(src);
+          log(`Moved: ${f}`);
+        });
+
+        // Find and move PDF
+        const pdfFiles = fs.readdirSync(outputPath).filter(f => f.startsWith('IQ_Report_GW_') && f.endsWith('.pdf'));
+        pdfFiles.forEach(f => {
+          const src = path.join(outputPath, f);
+          const dest = path.join(reportsFolder, f);
+          fs.copyFileSync(src, dest);
+          fs.unlinkSync(src);
+          log(`Moved: ${f}`);
+        });
+
+        log('✅ IQ Report generation complete. Files moved to Inventory Reports.');
+        process.exit(0);
+      });
+
+      pdfChild.on('error', (e) => {
+        errlog('PDF generation spawn error:', e.message);
+        process.exit(1);
+      });
+    });
+
+    iqChild.on('error', (e) => {
+      errlog('IQ scraper spawn error:', e.message);
+      process.exit(1);
+    });
+
+    return; // Exit early
+  }
+
+
+
+
+
+
+
+
+
   log('=== CONFIGURING TEST EXECUTION ===');
 
 
-    // Determine which carrier folder to use
+  // Determine which carrier folder to use
   let carrierFolder = 'mobilex';
   const providerLower = String(selection.provider || '').toLowerCase();
 

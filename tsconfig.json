@@ -9,7 +9,7 @@
   },
   "include": [
     "**/*.ts"
-  ],
+, "tests/scrape/run-generate-iq.js"  ],
   "exclude": [
     "node_modules"
   ]
