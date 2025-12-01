@@ -8,7 +8,7 @@
 
 param(
   [string]$SevenZipExe = "C:\Program Files\7-Zip\7z.exe",
-  [string]$OutName = "Atom8-v5.exe",
+  [string]$OutName = "Atom8-v8.exe",
   [switch]$ForceDownloadNode
 )
 

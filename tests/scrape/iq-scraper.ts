@@ -6,7 +6,6 @@ import * as path from 'path';
  * Represents enhanced line data (Gateway + IQ combined)
  */
 export interface EnhancedLineData {
-  // From Gateway Inventory
   port?: string;
   gateway?: string;
   mdn?: string;
@@ -14,254 +13,201 @@ export interface EnhancedLineData {
   imei?: string;
   carrier?: string;
   gatewayStatus?: string;
-  
-  // From PrepaidIQ
   iqStatus?: string;
-  ratePlan?: string;
-  product?: string;
-  balance?: string;
-  credit?: string;
-  expiry?: string;
-  expirationDate?: string;
-  pinStatus?: string;
-  dealerNotes?: string;
-  lastUpdated?: string;
-  
-  // Combined status
-  dataSource?: string; // 'gateway-only', 'iq-only', 'combined'
+  accountNumber?: string;
+  simType?: string;
+  activationCode?: string;
+  dealer?: string;
+  pin?: string;
+  portIn?: string;
+  subscriptionStatus?: string;
+  planId?: string;
+  startDate?: string;
+  endDate?: string;
+  purchasedData?: string;
+  consumedData?: string;
+  dataSource?: string;
 }
 
-/**
- * Finds the latest Gateway Inventory JSON file
- */
 function findLatestInventoryFile(outputPath: string): string | null {
   const reportsFolder = path.join(outputPath, 'Inventory Reports');
-  
-  if (!fs.existsSync(reportsFolder)) {
-    console.warn('Inventory Reports folder not found');
-    return null;
-  }
-  
+  if (!fs.existsSync(reportsFolder)) return null;
   const files = fs.readdirSync(reportsFolder)
     .filter(f => f.startsWith('GW_Inventory_') && f.endsWith('.json'))
     .sort()
-    .reverse(); // Most recent first
-  
-  if (files.length === 0) {
-    console.warn('No inventory JSON files found');
-    return null;
-  }
-  
-  const latestFile = path.join(reportsFolder, files[0]);
-  console.log(`Found latest inventory file: ${files[0]}`);
-  
-  return latestFile;
+    .reverse();
+  return files.length > 0 ? path.join(reportsFolder, files[0]) : null;
 }
 
-/**
- * Logs into PrepaidIQ with credentials
- */
-async function loginToIQ(page: Page): Promise<void> {
+async function loginAndNavigateToTool(page: Page): Promise<void> {
   console.log('Logging into PrepaidIQ...');
-  
   try {
-    await page.goto('https://dealers.prepaidiq.com/login', { timeout: 60000 });
+    // 1. Go to the specific tool URL requested
+    await page.goto('https://dealers.prepaidiq.com/tools/line-details/197', { timeout: 60000 });
     
-    // Wait for login form
-    await page.waitForTimeout(2000);
+    // 2. Fill Credentials
+    await page.locator('input[name="email"]').fill('gatewayhelper-prepaidiq@printersplus.com');
+    await page.locator('input[name="password"]').fill('gateway123');
+    await page.getByRole('button', { name: 'Sign in' }).click();
     
-    // Fill credentials - try multiple selectors
-    const emailField = page.locator('input[name="email"], input[type="email"], #email, #username');
-    await emailField.waitFor({ state: 'visible', timeout: 10000 });
-    await emailField.fill('gatewayhelper-prepaidiq@printersplus.com');
+    console.log('Login submitted. Waiting for tool to load...');
     
-    const passwordField = page.locator('input[name="password"], input[type="password"], #password');
-    await passwordField.fill('gateway123');
+    // 3. Verify we are on the correct page
+    await page.waitForTimeout(5000); // Give it a moment to redirect
     
-    // Submit login
-    const submitBtn = page.locator('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
-    await submitBtn.click();
-    
-    // Wait for navigation
-    await page.waitForTimeout(5000);
-    
-    console.log('Login completed.');
+    // Check if the MDN input is visible. If we got redirected to dashboard, click the tool manually.
+    if (!(await page.locator('#mdn').isVisible())) {
+       console.log('Redirected to dashboard? Navigating to Line Details...');
+       await page.goto('https://dealers.prepaidiq.com/tools/line-details/197');
+    }
+
+    // Final check
+    await page.locator('#mdn').waitFor({ state: 'visible', timeout: 30000 });
+    console.log('Ready to scrape: MDN Input is visible.');
+
   } catch (e) {
-    console.error('Login failed:', (e as Error).message);
+    console.error('Login/Navigation failed:', (e as Error).message);
     throw e;
   }
 }
 
 /**
- * Scrapes IQ details for a single MDN
+ * Robustly grabs the value from the table row corresponding to the header
+ * Structure: <tr> <th>Header</th> <td>Value</td> </tr>
  */
-async function scrapeIQForMDN(page: Page, mdn: string): Promise<any> {
-  console.log(`Scraping IQ data for MDN: ${mdn}...`);
-  
+async function getTableValue(page: Page, headerText: string): Promise<string> {
   try {
-    // Navigate to line search/details page
-    await page.goto(`https://dealers.prepaidiq.com/tools/line-details/${mdn}`, { timeout: 60000, waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(3000);
-    
-    const iqData: any = {
-      mdn: mdn,
-      iqStatus: null,
-      ratePlan: null,
-      balance: null,
-      expiry: null,
-      dealerNotes: null
-    };
-    
-    // Try to extract data from page
-    const bodyText = (await page.locator('body').textContent().catch(() => '')) ?? '';
-
-    // Look for common patterns
-    if (bodyText.includes('Active') || bodyText.includes('ACTIVE')) {
-      iqData.iqStatus = 'Active';
-    } else if (bodyText.includes('Inactive') || bodyText.includes('INACTIVE')) {
-      iqData.iqStatus = 'Inactive';
-    } else if (bodyText.includes('Suspended') || bodyText.includes('SUSPENDED')) {
-      iqData.iqStatus = 'Suspended';
+    // XPath: Find a 'th' containing the text, then get the immediately following 'td'
+    const locator = page.locator(`//tr[th[contains(normalize-space(.), "${headerText}")]]/td`);
+    if (await locator.count() > 0) {
+      const text = await locator.first().innerText();
+      return text.trim();
     }
-    
-    // Try to find specific fields
-    const labels = await page.locator('label, .label, .field-label, dt, th').allTextContents().catch(() => []);
-    const values = await page.locator('input[readonly], .value, .field-value, dd, td').allTextContents().catch(() => []);
-    
-    for (let i = 0; i < Math.min(labels.length, values.length); i++) {
-      const label = labels[i].toLowerCase().trim();
-      const value = values[i].trim();
-      
-      if (value) {
-        if (label.includes('plan') || label.includes('product')) iqData.ratePlan = value;
-        if (label.includes('balance') || label.includes('credit')) iqData.balance = value;
-        if (label.includes('expir') || label.includes('expire')) iqData.expiry = value;
-        if (label.includes('note')) iqData.dealerNotes = value;
-      }
-    }
-    
-    console.log(`  → Found IQ data: Status=${iqData.iqStatus}, Plan=${iqData.ratePlan}`);
-    return iqData;
-    
+    return 'N/A';
   } catch (e) {
-    console.warn(`Failed to scrape IQ for ${mdn}:`, (e as Error).message);
-    return { mdn: mdn, iqStatus: 'Error', error: (e as Error).message };
+    return 'N/A';
   }
 }
 
-/**
- * Main scraping function - combines Gateway + IQ data
- */
+async function scrapeIQForMDN(page: Page, mdn: string): Promise<any> {
+  console.log(`  Scraping IQ data for MDN: ${mdn}...`);
+  
+  const iqData: any = {
+    mdn: mdn,
+    iqStatus: 'N/A',
+    accountNumber: 'N/A',
+    simType: 'N/A',
+    activationCode: 'N/A',
+    dealer: 'N/A',
+    pin: 'N/A',
+    portIn: 'N/A',
+    subscriptionStatus: 'N/A',
+    planId: 'N/A',
+    startDate: 'N/A',
+    endDate: 'N/A',
+    purchasedData: 'N/A',
+    consumedData: 'N/A'
+  };
+
+  try {
+    const mdnInput = page.locator('#mdn');
+    await mdnInput.click();
+    await mdnInput.fill(''); 
+    await mdnInput.fill(mdn);
+    await page.getByRole('button', { name: 'Submit' }).click();
+    
+    // === SYNCHRONIZATION FIX ===
+    // We must wait for the table to populate with THIS MDN.
+    // The result usually includes the MDN in the first row.
+    // We wait for the table container (#apiData) to contain the MDN we just typed.
+    // Note: The result might have a +1 prefix (e.g., +1518...), so we match the last 10 digits.
+    const rawMdn = mdn.slice(-10); // Last 10 digits
+    
+    try {
+      await page.locator(`//div[@id="apiData"]//td[contains(text(), "${rawMdn}")]`)
+                .waitFor({ state: 'visible', timeout: 8000 });
+    } catch (e) {
+      // If we timed out waiting for the MDN to appear, check if an error message appeared instead
+      const bodyText = await page.locator('body').innerText();
+      if (bodyText.includes('No result') || bodyText.includes('Error')) {
+        console.warn(`  → API returned "No Result" or Error for ${mdn}`);
+        iqData.iqStatus = 'Not Found';
+        return iqData;
+      }
+      console.warn(`  → Timeout waiting for data table for ${mdn}`);
+      return iqData;
+    }
+
+    // === DATA EXTRACTION ===
+    // Now we know the table is visible and has our data.
+    iqData.iqStatus = await getTableValue(page, 'Status');
+    iqData.accountNumber = await getTableValue(page, 'Account Number');
+    iqData.simType = await getTableValue(page, 'SIM Type');
+    iqData.activationCode = await getTableValue(page, 'Activation Code');
+    iqData.dealer = await getTableValue(page, 'Dealer');
+    iqData.pin = await getTableValue(page, 'PIN');
+    iqData.portIn = await getTableValue(page, 'Port In');
+    iqData.subscriptionStatus = await getTableValue(page, 'Subscription Status');
+    iqData.planId = await getTableValue(page, 'Plan ID');
+    iqData.startDate = await getTableValue(page, 'Start Date');
+    iqData.endDate = await getTableValue(page, 'End Date');
+    iqData.purchasedData = await getTableValue(page, 'Purchased Data');
+    iqData.consumedData = await getTableValue(page, 'Consumed Data');
+
+    console.log(`  → Success: Status=${iqData.iqStatus}, Plan=${iqData.planId}`);
+    
+    // === SLOW DOWN ===
+    // Pause for 2 seconds to make the process observable and reliable
+    await page.waitForTimeout(2000);
+    
+    return iqData;
+    
+  } catch (e) {
+    console.warn(`  → Failed: ${(e as Error).message}`);
+    return { ...iqData, iqStatus: 'Error' };
+  }
+}
+
 export async function scrapeIQEnhanced(page: Page, outputPath: string): Promise<{ data: EnhancedLineData[], errors: string[] }> {
   const errors: string[] = [];
   const enhancedData: EnhancedLineData[] = [];
   
-  // Step 1: Load latest Gateway Inventory
   const inventoryFile = findLatestInventoryFile(outputPath);
+  if (!inventoryFile) return { data: [], errors: ['No inventory file found'] };
   
-  if (!inventoryFile) {
-    errors.push('No Gateway Inventory file found. Run Inventory scrape first.');
-    return { data: [], errors };
-  }
+  console.log(`Loading inventory from: ${inventoryFile}`);
+  const inventoryJson = JSON.parse(fs.readFileSync(inventoryFile, 'utf8'));
+  const gatewayData = inventoryJson.data || [];
   
-  let gatewayData: any[] = [];
+  // Filter for valid MDNs
+  const portsWithMDN = gatewayData.filter((port: any) => port.mdn && port.mdn.length >= 10 && port.mdn !== 'N/A');
+  console.log(`Processing ${portsWithMDN.length} lines with MDNs...`);
+
+  await loginAndNavigateToTool(page);
   
-  try {
-    const inventoryJson = JSON.parse(fs.readFileSync(inventoryFile, 'utf8'));
-    gatewayData = inventoryJson.data || [];
-    console.log(`Loaded ${gatewayData.length} ports from inventory.`);
-  } catch (e) {
-    errors.push(`Failed to read inventory file: ${(e as Error).message}`);
-    return { data: [], errors };
-  }
-  
-  // Step 2: Filter ports with MDN (phone numbers)
-  const portsWithMDN = gatewayData.filter(port => {
-  return port.mdn && 
-         port.mdn !== 'N/A' && 
-         port.mdn !== 'MISSING' && 
-         port.mdn.length >= 10; // Valid phone numbers are at least 10 digits
-    });
-  console.log(`Found ${portsWithMDN.length} ports with MDN to check in IQ.`);
-  
-  if (portsWithMDN.length === 0) {
-    errors.push('No ports with MDN found in inventory.');
-    return { data: [], errors };
-  }
-  
-  // Step 3: Login to IQ
-  try {
-    await loginToIQ(page);
-  } catch (e) {
-    errors.push(`IQ Login failed: ${(e as Error).message}`);
-    return { data: [], errors };
-  }
-  
-  // Step 4: Scrape IQ data for each MDN (limit to first 50 to avoid timeout)
-  const limit = Math.min(portsWithMDN.length, 50);
-  console.log(`Scraping IQ data for ${limit} lines...`);
-  
-  for (let i = 0; i < limit; i++) {
+  for (let i = 0; i < portsWithMDN.length; i++) {
     const port = portsWithMDN[i];
     
-    try {
-      const iqData = await scrapeIQForMDN(page, port.mdn);
-      
-      // Combine Gateway + IQ data
-      const enhanced: EnhancedLineData = {
-        port: port.port,
-        gateway: port.port ? port.port.split('-')[0] : undefined,
-        mdn: port.mdn,
-        iccid: port.iccid,
-        imei: port.imei,
-        carrier: port.carrier,
-        gatewayStatus: port.status,
-        iqStatus: iqData.iqStatus,
-        ratePlan: iqData.ratePlan,
-        balance: iqData.balance,
-        expiry: iqData.expiry,
-        dealerNotes: iqData.dealerNotes,
-        dataSource: 'combined'
-      };
-      
-      enhancedData.push(enhanced);
-      
-    } catch (e) {
-      console.error(`Error processing ${port.port}:`, (e as Error).message);
-      errors.push(`${port.port}: ${(e as Error).message}`);
-    }
+    // Log progress
+    if (i % 5 === 0) console.log(`Processing line ${i + 1} of ${portsWithMDN.length}...`);
     
-    // Rate limiting
-    await page.waitForTimeout(1000);
+    const iqResult = await scrapeIQForMDN(page, port.mdn);
+    
+    enhancedData.push({
+      ...port, 
+      ...iqResult, 
+      gatewayStatus: port.status,
+      dataSource: 'combined'
+    });
   }
-  
-  console.log(`IQ scrape complete. Enhanced ${enhancedData.length} lines.`);
   
   return { data: enhancedData, errors };
 }
 
-/**
- * Saves enhanced IQ data to JSON file
- */
 export function saveEnhancedIQData(data: EnhancedLineData[], errors: string[], outputPath: string): string {
   const timestamp = new Date().toISOString().split('T')[0];
   const jsonPath = path.join(outputPath, `IQ_Enhanced_${timestamp}.json`);
-  
-  const payload = {
-    sourceUrl: 'https://dealers.prepaidiq.com/tools/line-details/',
-    timestamp: new Date().toISOString(),
-    data: data,
-    errors: errors,
-    summary: {
-      totalLines: data.length,
-      withIQData: data.filter(d => d.iqStatus).length,
-      errors: errors.length
-    }
-  };
-  
-  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
-  
-  console.log(`✅ Enhanced IQ data saved to: ${jsonPath}`);
-  
+  fs.writeFileSync(jsonPath, JSON.stringify({ data, errors }, null, 2), 'utf8');
+  console.log(`✅ Saved enhanced data: ${jsonPath}`);
   return jsonPath;
 }
